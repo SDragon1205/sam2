@@ -30,7 +30,7 @@ from training.utils.checkpoint_utils import (
     load_state_dict_into_model,
     with_check_parameter_frozen,
 )
-from training.utils.data_utils import BatchedVideoDatapoint
+from training.utils.data_utils import BatchedVideoDatapoint_yolo
 from training.utils.distributed import all_reduce_max, barrier, get_rank
 
 from training.utils.logger import Logger, setup_logging
@@ -55,7 +55,7 @@ from training.utils.train_utils import (
 
 import sys
 
-CORE_LOSS_KEY = "core_loss"
+CORE_LOSS_KEY_YOLO = "core_loss"
 
 
 def unwrap_ddp_if_wrapped(model):
@@ -139,7 +139,7 @@ class LoggingConf:
     log_batch_stats: bool = False
 
 
-class Trainer:
+class Trainer_yolo:
     """
     Trainer supporting the DDP training strategies.
     """
@@ -450,7 +450,7 @@ class Trainer:
 
     def _step(
         self,
-        batch: BatchedVideoDatapoint,
+        batch: BatchedVideoDatapoint_yolo,
         model: nn.Module,
         phase: str,
     ):
@@ -459,16 +459,13 @@ class Trainer:
         # for outputs_i in outputs:
         #     for i_mpmhs in range(len(outputs_i["multistep_pred_multimasks_high_res"])):
         #         print(f"outputs[multistep_pred_multimasks_high_res][{i_mpmhs}]:", outputs_i["multistep_pred_multimasks_high_res"][i_mpmhs].shape)
-        targets = batch.masks
+        targets = batch.gtdata
         # print("targets:", targets.shape)
         batch_size = len(batch.img_batch)
 
         key = batch.dict_key  # key for dataset
-        # print("key:", key)
-        # print("self.loss:", self.loss)
         loss = self.loss[key](outputs, targets)
         loss_str = f"Losses/{phase}_{key}_loss"
-        # print("loss_0:", loss)
 
         loss_log_str = os.path.join("Step_Losses", loss_str)
 
@@ -481,7 +478,6 @@ class Trainer:
             loss = self._log_loss_detailed_and_return_core_loss(
                 loss, loss_log_str, self.steps[phase]
             )
-            # print("loss_1:", loss)
 
         if self.steps[phase] % self.logging_conf.log_scalar_frequency == 0:
             self.logger.log(
@@ -856,7 +852,7 @@ class Trainer:
 
     def _run_step(
         self,
-        batch: BatchedVideoDatapoint,
+        batch: BatchedVideoDatapoint_yolo,
         phase: str,
         loss_mts: Dict[str, AverageMeter],
         extra_loss_mts: Dict[str, AverageMeter],
@@ -882,14 +878,10 @@ class Trainer:
 
         assert len(loss_dict) == 1
         loss_key, loss = loss_dict.popitem()
-        # print("=================================")
-        # print("_run_step")
         # print("loss_key:", loss_key)
         # print("loss:", loss)
         # print("batch_size:", batch_size)
-        # print("extra_losses:", extra_losses)
-
-        # print("self.model:", self.model)
+        print("extra_losses:", extra_losses)
         # sys.exit()
 
         if not math.isfinite(loss.item()):
@@ -1053,7 +1045,7 @@ class Trainer:
         )
 
     def _log_loss_detailed_and_return_core_loss(self, loss, loss_str, step):
-        core_loss = loss.pop(CORE_LOSS_KEY)
+        core_loss = loss.pop(CORE_LOSS_KEY_YOLO)
         if step % self.logging_conf.log_scalar_frequency == 0:
             for k in loss:
                 log_str = os.path.join(loss_str, k)

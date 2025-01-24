@@ -15,6 +15,8 @@ from sam2.modeling.sam.prompt_encoder import PromptEncoder
 from sam2.modeling.sam.transformer import TwoWayTransformer
 from sam2.modeling.sam2_utils import get_1d_sine_pe, MLP, select_closest_cond_frames
 
+import sys
+
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
 
@@ -512,6 +514,9 @@ class SAM2Base(torch.nn.Module):
         device = current_vision_feats[-1].device
         # The case of `self.num_maskmem == 0` below is primarily used for reproducing SAM on images.
         # In this case, we skip the fusion with any memory.
+        # print("============================================================================")
+        # print("_prepare_memory_conditioned_features")
+        # print("self.num_maskmem:", self.num_maskmem)
         if self.num_maskmem == 0:  # Disable memory and skip fusion
             pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
             return pix_feat
@@ -519,6 +524,8 @@ class SAM2Base(torch.nn.Module):
         num_obj_ptr_tokens = 0
         tpos_sign_mul = -1 if track_in_reverse else 1
         # Step 1: condition the visual features of the current frame on previous memories
+        # print("is_init_cond_frame:", is_init_cond_frame)
+        # sys.exit()
         if not is_init_cond_frame:
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
@@ -628,9 +635,7 @@ class SAM2Base(torch.nn.Module):
                     if self.add_tpos_enc_to_obj_ptrs:
                         t_diff_max = max_obj_ptrs_in_encoder - 1
                         tpos_dim = C if self.proj_tpos_enc_in_obj_ptrs else self.mem_dim
-                        obj_pos = torch.tensor(pos_list).to(
-                            device=device, non_blocking=True
-                        )
+                        obj_pos = torch.tensor(pos_list, device=device)
                         obj_pos = get_1d_sine_pe(obj_pos / t_diff_max, dim=tpos_dim)
                         obj_pos = self.obj_ptr_tpos_proj(obj_pos)
                         obj_pos = obj_pos.unsqueeze(1).expand(-1, B, self.mem_dim)
@@ -650,10 +655,15 @@ class SAM2Base(torch.nn.Module):
                     num_obj_ptr_tokens = 0
         else:
             # for initial conditioning frames, encode them without using any previous memory
+            # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
+            # print("current_vision_feats[-1]:", current_vision_feats[-1].shape)
+            # print("self.no_mem_embed:", self.no_mem_embed.shape)
             if self.directly_add_no_mem_embed:
                 # directly add no-mem embedding (instead of using the transformer encoder)
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
                 pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+                # print("pix_feat_with_mem:", pix_feat_with_mem.shape)
+                # sys.exit()
                 return pix_feat_with_mem
 
             # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
@@ -748,6 +758,14 @@ class SAM2Base(torch.nn.Module):
             ]
         else:
             high_res_features = None
+
+        # print("============================================================================")
+        # print("_track_step")
+        # print("high_res_features:", len(high_res_features), high_res_features[0].shape, high_res_features[1].shape)
+        # print("mask_inputs is not None:", mask_inputs is not None)
+        # print("use_mask_input_as_output_without_sam:", self.use_mask_input_as_output_without_sam)
+        # sys.exit()
+
         if mask_inputs is not None and self.use_mask_input_as_output_without_sam:
             # When use_mask_input_as_output_without_sam=True, we directly output the mask input
             # (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
@@ -772,10 +790,14 @@ class SAM2Base(torch.nn.Module):
             # here we might feed previously predicted low-res SAM mask logits into the SAM mask decoder,
             # e.g. in demo where such logits come from earlier interaction instead of correction sampling
             # (in this case, any `mask_inputs` shouldn't reach here as they are sent to _use_mask_as_output instead)
+            # print("prev_sam_mask_logits:", prev_sam_mask_logits)
             if prev_sam_mask_logits is not None:
                 assert point_inputs is not None and mask_inputs is None
                 mask_inputs = prev_sam_mask_logits
             multimask_output = self._use_multimask(is_init_cond_frame, point_inputs)
+            # print("multimask_output:", multimask_output)
+            # print("pix_feat:", pix_feat.shape)
+            # print("high_res_features:", len(high_res_features), high_res_features[0].shape, high_res_features[1].shape)
             sam_outputs = self._forward_sam_heads(
                 backbone_features=pix_feat,
                 point_inputs=point_inputs,
@@ -886,6 +908,12 @@ class SAM2Base(torch.nn.Module):
             and (is_init_cond_frame or self.multimask_output_for_tracking)
             and (self.multimask_min_pt_num <= num_pts <= self.multimask_max_pt_num)
         )
+        # print("============================================================================")
+        # print("_use_multimask")
+        # print("self.multimask_output_in_sam:", self.multimask_output_in_sam)
+        # print("is_init_cond_frame: ", is_init_cond_frame)
+        # print("self.multimask_output_for_tracking:", self.multimask_output_for_tracking)
+        # print("num_pts:", num_pts)
         return multimask_output
 
     def _apply_non_overlapping_constraints(self, pred_masks):

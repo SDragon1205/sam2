@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from sam2.modeling.sam2_utils import LayerNorm2d, MLP
-
+import sys
 
 class MaskDecoder(nn.Module):
     def __init__(
@@ -197,6 +197,11 @@ class MaskDecoder(nn.Module):
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
+        # print("============================================================================")
+        # print("MaskDecoder")
+        # print("tokens.shape[0]:", tokens.shape[0])
+        # print("image_embeddings.shape[0]:", image_embeddings.shape[0])
+        # sys.exit()
         if repeat_image:
             src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)
         else:
@@ -209,21 +214,27 @@ class MaskDecoder(nn.Module):
         pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)
         b, c, h, w = src.shape
 
+        # print("1src.shape:", src.shape)
+        # print("1pos_src.shape:", pos_src.shape)
         # Run the transformer
         hs, src = self.transformer(src, pos_src, tokens)
+        # print("2src.shape:", src.shape)
         iou_token_out = hs[:, s, :]
         mask_tokens_out = hs[:, s + 1 : (s + 1 + self.num_mask_tokens), :]
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)
+        # print("3src.shape:", src.shape, type(src))
         if not self.use_high_res_features:
             upscaled_embedding = self.output_upscaling(src)
         else:
             dc1, ln1, act1, dc2, act2 = self.output_upscaling
             feat_s0, feat_s1 = high_res_features
             upscaled_embedding = act1(ln1(dc1(src) + feat_s1))
+            # print("1upscaled_embedding.shape:", upscaled_embedding.shape, type(upscaled_embedding))
             upscaled_embedding = act2(dc2(upscaled_embedding) + feat_s0)
-
+            # print("2upscaled_embedding.shape:", upscaled_embedding.shape, type(upscaled_embedding))
+        # sys.exit()
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
             hyper_in_list.append(

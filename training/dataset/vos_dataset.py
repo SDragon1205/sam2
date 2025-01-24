@@ -15,11 +15,11 @@ from iopath.common.file_io import g_pathmgr
 from PIL import Image as PILImage
 from torchvision.datasets.vision import VisionDataset
 
-from training.dataset.vos_raw_dataset import VOSRawDataset
+from training.dataset.vos_raw_dataset import VOSRawDataset, VOSRawDataset_yolo
 from training.dataset.vos_sampler import VOSSampler
 from training.dataset.vos_segment_loader import JSONSegmentLoader
 
-from training.utils.data_utils import Frame, Object, VideoDatapoint
+from training.utils.data_utils import Frame, Object, VideoDatapoint, Frame_yolo, VideoDatapoint_yolo
 
 MAX_RETRIES = 100
 
@@ -160,3 +160,113 @@ def tensor_2_PIL(data: torch.Tensor) -> PILImage.Image:
     data = data.cpu().numpy().transpose((1, 2, 0)) * 255.0
     data = data.astype(np.uint8)
     return PILImage.fromarray(data)
+
+######################################################################################################
+class VOSDataset_yolo(VisionDataset):
+    def __init__(
+        self,
+        transforms,
+        training: bool,
+        video_dataset: VOSRawDataset_yolo,
+        sampler: VOSSampler,
+        multiplier: int,
+        always_target=True,
+        target_segments_available=True,
+    ):
+        self._transforms = transforms
+        self.training = training
+        self.video_dataset = video_dataset
+        self.sampler = sampler
+
+        self.repeat_factors = torch.ones(len(self.video_dataset), dtype=torch.float32)
+        self.repeat_factors *= multiplier
+        print(f"Raw dataset length = {len(self.video_dataset)}")
+
+        self.curr_epoch = 0  # Used in case data loader behavior changes across epochs
+        self.always_target = always_target
+        self.target_segments_available = target_segments_available
+
+    def _get_datapoint(self, idx):
+
+        for retry in range(MAX_RETRIES):
+            try:
+                if isinstance(idx, torch.Tensor):
+                    idx = idx.item()
+                # sample a video
+                video = self.video_dataset.get_video(idx)
+                # sample frames and object indices to be used in a datapoint
+                sampled_frms = self.sampler.sample(
+                    video, epoch=self.curr_epoch
+                )
+                break  # Succesfully loaded video
+            except Exception as e:
+                if self.training:
+                    logging.warning(
+                        f"Loading failed (id={idx}); Retry {retry} with exception: {e}"
+                    )
+                    idx = random.randrange(0, len(self.video_dataset))
+                else:
+                    # Shouldn't fail to load a val video
+                    raise e
+        datapoint = self.construct(video, sampled_frms)
+        # if datapoint == None:
+        # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        # print("datapoint:", datapoint)
+        # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        for transform in self._transforms:
+            datapoint = transform(datapoint, epoch=self.curr_epoch)
+        return datapoint
+
+    def construct(self, video, sampled_frms):
+        """
+        Constructs a VideoDatapoint_yolo sample to pass to transforms
+        """
+        sampled_frames = sampled_frms.frames  # 已經從 sampler 中選好的 frames
+
+        images = []
+        rgb_images = load_images(sampled_frames)  # 加載 RGB 影像
+        # Iterate over the sampled frames and store their rgb data and YOLO object data (classes, bboxes)
+        for frame_idx, frame in enumerate(sampled_frames):
+            # 獲取影像尺寸
+            w, h = rgb_images[frame_idx].size
+
+            # 將標籤轉換為 YOLO 格式
+            classes = frame.classes  # 類別標籤
+            bboxes = frame.bboxes
+            scores = frame.scores
+            truncation = frame.truncation
+            occlusion = frame.occlusion
+            # bboxes = []
+            # for bbox in frame.bboxes:
+            #     # 將 bboxes 重新計算為正規化格式 (xywh)
+            #     x_center = bbox[0] / w
+            #     y_center = bbox[1] / h
+            #     box_width = bbox[2] / w
+            #     box_height = bbox[3] / h
+            #     bboxes.append((x_center, y_center, box_width, box_height))
+
+            # 創建 Frame_yolo 物件並存入影像列表
+            images.append(
+                Frame_yolo(
+                    data=rgb_images[frame_idx],  # 原始影像
+                    classes=classes,                    # 類別標籤
+                    bboxes=bboxes,               # 正規化邊界框
+                    scores=scores,
+                    # truncation=truncation,
+                    # occlusion=occlusion
+                )
+            )
+        # print("images", images)
+        # 回傳符合 YOLO 格式的 VideoDatapoint
+        # print("h, w:", h, w)
+        return VideoDatapoint_yolo(
+            frames=images,
+            video_id=video.video_id,
+            size=(h, w),
+        )
+
+    def __getitem__(self, idx):
+        return self._get_datapoint(idx)
+
+    def __len__(self):
+        return len(self.video_dataset)

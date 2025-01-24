@@ -21,7 +21,7 @@ from PIL import Image as PILImage
 
 from torchvision.transforms import InterpolationMode
 
-from training.utils.data_utils import VideoDatapoint
+from training.utils.data_utils import VideoDatapoint, VideoDatapoint_yolo
 
 
 def hflip(datapoint, index):
@@ -170,6 +170,7 @@ class RandomResizeAPI:
     def __call__(self, datapoint, **kwargs):
         if self.consistent_transform:
             size = random.choice(self.sizes)
+            # print("RandomResizeAPI datapoint:", datapoint)
             for i in range(len(datapoint.frames)):
                 datapoint = resize(
                     datapoint, i, size, self.max_size, square=self.square, v2=self.v2
@@ -524,5 +525,220 @@ class RandomMosaicVideoAPI:
                 target_grid_x=target_grid_x,
                 should_hflip=should_hflip,
             )
+
+        return datapoint
+
+######################################################################################################
+class RandomHorizontalFlip_yolo:
+    def __init__(self, consistent_transform, p=0.5):
+        self.p = p
+        self.consistent_transform = consistent_transform
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        # print("before datapoint:", datapoint)
+        # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        if self.consistent_transform:
+            if random.random() < self.p:
+                for i in range(len(datapoint.frames)):
+                    datapoint = self.hflip_yolo(datapoint, i)
+            # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            # print("after datapoint:", datapoint)
+            # print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            return datapoint
+        for i in range(len(datapoint.frames)):
+            if random.random() < self.p:
+                datapoint = self.hflip_yolo(datapoint, i)
+        return datapoint
+    
+    def hflip_yolo(self, datapoint, index):
+        datapoint.frames[index].data = F.hflip(datapoint.frames[index].data)
+
+        # 更新 bboxes
+        for i, bbox in enumerate(datapoint.frames[index].bboxes):
+            x_center, y_center, width, height = bbox
+            # 水平翻轉時，x_center 改變位置
+            datapoint.frames[index].bboxes[i] = (
+                1 - x_center,  # 翻轉 x_center
+                y_center,
+                width,
+                height,
+            )
+        return datapoint
+    
+class RandomResizeAPI_yolo:
+    def __init__(
+        self, sizes, consistent_transform, max_size=None, square=False, v2=False
+    ):
+        if isinstance(sizes, int):
+            sizes = (sizes,)
+        assert isinstance(sizes, Iterable)
+        self.sizes = list(sizes)
+        self.max_size = max_size
+        self.square = square
+        self.consistent_transform = consistent_transform
+        self.v2 = v2
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        if self.consistent_transform:
+            size = random.choice(self.sizes)
+            # print("datapoint:", datapoint)
+            for i in range(len(datapoint.frames)):
+                datapoint = self.resize_yolo(
+                    datapoint, i, size, self.max_size, square=self.square, v2=self.v2
+                )
+            return datapoint
+        for i in range(len(datapoint.frames)):
+            size = random.choice(self.sizes)
+            datapoint = self.resize_yolo(
+                datapoint, i, size, self.max_size, square=self.square, v2=self.v2
+            )
+        return datapoint
+    
+    def resize_yolo(self, datapoint, index, size, max_size=None, square=False, v2=False):
+        # size can be min_size (scalar) or (w, h) tuple
+
+        def get_size(image_size, size, max_size=None):
+            if isinstance(size, (list, tuple)):
+                return size[::-1]
+            else:
+                return get_size_with_aspect_ratio(image_size, size, max_size)
+
+        if square:
+            size = size, size
+        else:
+            cur_size = (
+                datapoint.frames[index].data.size()[-2:][::-1]
+                if v2
+                else datapoint.frames[index].data.size
+            )
+            size = get_size(cur_size, size, max_size)
+
+        old_size = (
+            datapoint.frames[index].data.size()[-2:][::-1]
+            if v2
+            else datapoint.frames[index].data.size
+        )
+        if v2:
+            datapoint.frames[index].data = Fv2.resize(
+                datapoint.frames[index].data, size, antialias=True
+            )
+        else:
+            datapoint.frames[index].data = F.resize(datapoint.frames[index].data, size)
+
+        new_size = (
+            datapoint.frames[index].data.size()[-2:][::-1]
+            if v2
+            else datapoint.frames[index].data.size
+        )
+
+        # for obj in datapoint.frames[index].objects:
+        #     if obj.segment is not None:
+        #         obj.segment = F.resize(obj.segment[None, None], size).squeeze()
+
+        h, w = size
+        datapoint.frames[index].size = (h, w)
+
+        # if self.consistent_transform:
+        #     datapoint.size = (h, w)
+
+        return datapoint
+
+class RandomGrayscale_yolo:
+    def __init__(self, consistent_transform, p=0.5):
+        self.p = p
+        self.consistent_transform = consistent_transform
+        self.Grayscale = T.Grayscale(num_output_channels=3)
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        if self.consistent_transform:
+            if random.random() < self.p:
+                for img in datapoint.frames:
+                    img.data = self.Grayscale(img.data)
+            return datapoint
+        for img in datapoint.frames:
+            if random.random() < self.p:
+                img.data = self.Grayscale(img.data)
+        return datapoint
+
+class ColorJitter_yolo:
+    def __init__(self, consistent_transform, brightness, contrast, saturation, hue):
+        self.consistent_transform = consistent_transform
+        self.brightness = (
+            brightness
+            if isinstance(brightness, list)
+            else [max(0, 1 - brightness), 1 + brightness]
+        )
+        self.contrast = (
+            contrast
+            if isinstance(contrast, list)
+            else [max(0, 1 - contrast), 1 + contrast]
+        )
+        self.saturation = (
+            saturation
+            if isinstance(saturation, list)
+            else [max(0, 1 - saturation), 1 + saturation]
+        )
+        self.hue = hue if isinstance(hue, list) or hue is None else ([-hue, hue])
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        if self.consistent_transform:
+            # Create a color jitter transformation params
+            (
+                fn_idx,
+                brightness_factor,
+                contrast_factor,
+                saturation_factor,
+                hue_factor,
+            ) = T.ColorJitter.get_params(
+                self.brightness, self.contrast, self.saturation, self.hue
+            )
+        for img in datapoint.frames:
+            if not self.consistent_transform:
+                (
+                    fn_idx,
+                    brightness_factor,
+                    contrast_factor,
+                    saturation_factor,
+                    hue_factor,
+                ) = T.ColorJitter.get_params(
+                    self.brightness, self.contrast, self.saturation, self.hue
+                )
+            for fn_id in fn_idx:
+                if fn_id == 0 and brightness_factor is not None:
+                    img.data = F.adjust_brightness(img.data, brightness_factor)
+                elif fn_id == 1 and contrast_factor is not None:
+                    img.data = F.adjust_contrast(img.data, contrast_factor)
+                elif fn_id == 2 and saturation_factor is not None:
+                    img.data = F.adjust_saturation(img.data, saturation_factor)
+                elif fn_id == 3 and hue_factor is not None:
+                    img.data = F.adjust_hue(img.data, hue_factor)
+        return datapoint
+    
+class ToTensorAPI_yolo:
+    def __init__(self, v2=False):
+        self.v2 = v2
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        for img in datapoint.frames:
+            if self.v2:
+                img.data = Fv2.to_image_tensor(img.data)
+            else:
+                img.data = F.to_tensor(img.data)
+        return datapoint
+
+class NormalizeAPI_yolo:
+    def __init__(self, mean, std, v2=False):
+        self.mean = mean
+        self.std = std
+        self.v2 = v2
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        for img in datapoint.frames:
+            if self.v2:
+                img.data = Fv2.convert_image_dtype(img.data, torch.float32)
+                img.data = Fv2.normalize(img.data, mean=self.mean, std=self.std)
+            else:
+                img.data = F.normalize(img.data, mean=self.mean, std=self.std)
 
         return datapoint

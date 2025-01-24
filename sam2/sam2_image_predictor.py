@@ -16,6 +16,7 @@ from sam2.modeling.sam2_base import SAM2Base
 
 from sam2.utils.transforms import SAM2Transforms
 
+import torch.nn.functional as F
 
 class SAM2ImagePredictor:
     def __init__(
@@ -417,6 +418,9 @@ class SAM2ImagePredictor:
             feat_level[img_idx].unsqueeze(0)
             for feat_level in self._features["high_res_feats"]
         ]
+
+        # print("batched_mode", batched_mode)
+
         low_res_masks, iou_predictions, _, _ = self.model.sam_mask_decoder(
             image_embeddings=self._features["image_embed"][img_idx].unsqueeze(0),
             image_pe=self.model.sam_prompt_encoder.get_dense_pe(),
@@ -427,12 +431,28 @@ class SAM2ImagePredictor:
             high_res_features=high_res_features,
         )
 
+        # convert masks from possibly bfloat16 (or float16) to float32
+        # (older PyTorch versions before 2.1 don't support `interpolate` on bf16)
+        # low_res_multimasks = low_res_masks.float()
+        # high_res_multimasks = F.interpolate(
+        #     low_res_multimasks,
+        #     size=(self.image_size, self.image_size),
+        #     mode="bilinear",
+        #     align_corners=False,
+        # )
+        print("low_res_masks.shape:", low_res_masks.shape)
+
         # Upscale the masks to the original image resolution
         masks = self._transforms.postprocess_masks(
             low_res_masks, self._orig_hw[img_idx]
         )
+        print("masks:", masks.shape)
         low_res_masks = torch.clamp(low_res_masks, -32.0, 32.0)
+        print("low_res_masks:", low_res_masks.shape)
+        print("return_logits", return_logits)
+
         if not return_logits:
+            print("self.mask_threshold:", self.mask_threshold)
             masks = masks > self.mask_threshold
 
         return masks, iou_predictions, low_res_masks

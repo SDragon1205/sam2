@@ -13,9 +13,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from training.trainer import CORE_LOSS_KEY
+from training.trainer_yolo import CORE_LOSS_KEY_YOLO
 
 from training.utils.distributed import get_world_size, is_dist_avail_and_initialized
 
+from ultralytics.utils.loss import v8DetectionLoss
+from ultralytics.nn.modules.head import Detect
+
+import sys
 
 def dice_loss(inputs, targets, num_objects, loss_on_multimask=False):
     """
@@ -305,3 +310,54 @@ class MultiStepMultiMasksAndIous(nn.Module):
                 reduced_loss += losses[loss_key] * weight
 
         return reduced_loss
+    
+class WrappedModel(nn.Module):
+    """Wraps the Detect module into a custom model structure."""
+    def __init__(self, detect_module, args=None):
+        super().__init__()
+        self.model = nn.Sequential(  # 将 Detect 模块添加为 Sequential 的最后一层
+            detect_module   # Detect 模块作为最后一层
+        )
+        self.args = args
+
+    def forward(self, x):
+        return self.model(x)
+
+class HypParams:
+    def __init__(self, box, cls, dfl):
+        self.box = box
+        self.cls = cls
+        self.dfl = dfl
+
+class DetectionLoss(nn.Module):
+    def __init__(
+        self,
+        nc=10,  # 假设检测类别数为 80
+        ch=[256, 64, 32],  # 假设有三个检测层，通道数分别为 256, 64, 32
+        box=7.5,
+        cls=0.5,
+        dfl=1.5,
+    ):
+        super().__init__()
+        detect_module = Detect(nc=nc, ch=ch)
+        wrapped_model = WrappedModel(detect_module)
+        self.loss = v8DetectionLoss(wrapped_model)
+        self.loss.hyp = HypParams(box=box, cls=cls, dfl=dfl)
+        self.loss.stride = [16, 8, 4] # 1024/64, 1024/128, 1024/256
+
+    def forward(self, preds, batch):
+        #"/home/si2/anaconda3/envs/sam2/lib/python3.10/site-packages/ultralytics/utils/loss.py / class v8DetectionLoss / def __call__(self, preds, batch, detach=True):"
+        # for i_pred in range(len(preds)):
+        #     print(f"preds[{i_pred}]: {preds[i_pred].shape}")
+        # for k, v in batch.items():
+        #     print(f"{k}: {v.shape}")
+        # sys.exit()
+        total_loss, loss_details = self.loss(preds, batch, detach=False)
+
+        losses = defaultdict(int)
+        losses['loss_box'] = loss_details[0]
+        losses['loss_cls'] = loss_details[1]
+        losses['loss_dfl'] = loss_details[2]
+        losses[CORE_LOSS_KEY_YOLO] = total_loss
+
+        return losses
