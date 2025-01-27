@@ -309,6 +309,7 @@ def collate_fn_yolo(
     # ]  # List to store frame indices for each time step
     step_t_classes = []
     step_t_bbox = []
+    step_t_ori_shape = []
     # step_t_score = []
     # step_t_obj_to_frame_idx = [] # origin yolo
     batch_idx = []
@@ -338,6 +339,7 @@ def collate_fn_yolo(
                 batch_idx.append(video_idx * T + t)
                 step_t_classes.append(frame.classes[idx]-1)
                 step_t_bbox.append(torch.tensor(frame.bboxes[idx], dtype=torch.float32))
+                step_t_ori_shape.append([orig_frame_size[0], orig_frame_size[1]])
                 # step_t_score.append(torch.tensor(frame.scores[idx], dtype=torch.float32))
             step_t_frame_orig_size[t].append(torch.tensor(orig_frame_size))
             # print("orig_frame_size:", orig_frame_size)
@@ -376,6 +378,7 @@ def collate_fn_yolo(
             "batch_idx": batch_idx,
             "cls": classes_stack,
             "bboxes": bbox_stack,
+            "ori_shape": step_t_ori_shape,
         },
         dict_key=dict_key,
         batch_size=[T],

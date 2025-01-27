@@ -445,12 +445,15 @@ class SAM2Base_yolo(torch.nn.Module):
         assert backbone_features.size(3) == self.sam_image_embedding_size
         
 
-        preds = self.yolo_detection_head(
+        x_preds = self.yolo_detection_head(
             image_embeddings=backbone_features,
             high_res_features=high_res_features,
         )
+        y_preds = self.yolo_detection_head.detect._inference(x_preds)
+        # print("y_preds[0]:", y_preds[0].shape)
+        # print("y_preds[1]:", y_preds[1][0].shape, y_preds[1][1].shape, y_preds[1][2].shape)
 
-        return preds
+        return (y_preds, x_preds)
 
     def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
         """

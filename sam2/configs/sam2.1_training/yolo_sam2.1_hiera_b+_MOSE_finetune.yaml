@@ -12,6 +12,17 @@ scratch:
   num_epochs: 40
   reverse_time_prob: 0.5
   nc: 10
+  names:
+    0: "pedestrian"
+    1: "people"
+    2: "bicycle"
+    3: "car"
+    4: "van"
+    5: "truck"
+    6: "tricycle"
+    7: "awning-tricycle"
+    8: "bus"
+    9: "motor"
 
 # dataset:
 #   # PATHS to Dataset
@@ -245,6 +256,16 @@ trainer:
     
     num_init_cond_frames_for_eval: 1  # only mask on the first frame
     forward_backbone_per_frame_for_eval: True
+
+  validator:
+    _target_: training.validator.maP50_Validator
+    save_dir: "./maP50"
+    imgsz: ${scratch.resolution}
+    conf: 0.001
+    iou: 0.7
+    max_det: 300
+    agnostic: false
+    names: ${scratch.names}
     
 
   data:

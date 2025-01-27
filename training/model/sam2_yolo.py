@@ -321,12 +321,16 @@ class SAM2Train_yolo(SAM2Base_yolo):
         hw_size0 = backbone_out['backbone_fpn'][0].shape[2]
         hw_size1 = backbone_out['backbone_fpn'][1].shape[2]
         hw_size2 = backbone_out['backbone_fpn'][2].shape[2]
+        # 14 = 10(nc) + 4(xywh)
         # 74 = 10(nc) + 16(reg_max) * 4 = 10 + 64
-        all_frame_outputs = [
-            torch.zeros(batch_size, 74, hw_size2, hw_size2),
-            torch.zeros(batch_size, 74, hw_size1, hw_size1),
-            torch.zeros(batch_size, 74, hw_size0, hw_size0)
-        ]
+        all_frame_outputs = (
+            torch.zeros(batch_size, 14, 86016, device=self.device),
+            [
+                torch.zeros(batch_size, 74, hw_size2, hw_size2, device=self.device),
+                torch.zeros(batch_size, 74, hw_size1, hw_size1, device=self.device),
+                torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device)
+            ]
+        )
 
         for stage_id in processing_order:
             # Get the image features for the current frames
@@ -376,10 +380,15 @@ class SAM2Train_yolo(SAM2Base_yolo):
             #     print(f"current_out[{i_cur}]: {current_out[i_cur].shape}")
             #     print(f"all_frame_outputs[{i_cur}]: {all_frame_outputs[i_cur].shape}")
             output_idx = 0
+            # print("all_frame_outputs[0].shape:", all_frame_outputs[0].shape)
+            # print("current_out[0].shape:", current_out[0].shape)
+            # print("current_out[0].device:", current_out[0].device)
+            # print("all_frame_outputs[0].device:", all_frame_outputs[0].device)
             for i_img_ids in img_ids:
                 all_frame_outputs[0][i_img_ids] = current_out[0][output_idx]
-                all_frame_outputs[1][i_img_ids] = current_out[1][output_idx]
-                all_frame_outputs[2][i_img_ids] = current_out[2][output_idx]
+                all_frame_outputs[1][0][i_img_ids] = current_out[1][0][output_idx]
+                all_frame_outputs[1][1][i_img_ids] = current_out[1][1][output_idx]
+                all_frame_outputs[1][2][i_img_ids] = current_out[1][2][output_idx]
                 output_idx = output_idx + 1
 
         if return_dict:

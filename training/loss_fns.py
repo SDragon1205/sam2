@@ -348,9 +348,13 @@ class DetectionLoss(nn.Module):
     def forward(self, preds, batch):
         #"/home/si2/anaconda3/envs/sam2/lib/python3.10/site-packages/ultralytics/utils/loss.py / class v8DetectionLoss / def __call__(self, preds, batch, detach=True):"
         # for i_pred in range(len(preds)):
-        #     print(f"preds[{i_pred}]: {preds[i_pred].shape}")
+        #     if isinstance(preds[i_pred], torch.Tensor):
+        #         print(f"preds[{i_pred}]: {preds[i_pred].shape} {preds[i_pred].device}")
+        # print("preds[0]:", preds[0].device)
+        # print("preds[1]:", preds[1][0].device, preds[1][1].device, preds[1][2].device)
         # for k, v in batch.items():
-        #     print(f"{k}: {v.shape}")
+        #     if isinstance(v, torch.Tensor):
+        #         print(f"{k}: {v.shape} {v.device}")
         # sys.exit()
         total_loss, loss_details = self.loss(preds, batch, detach=False)
 

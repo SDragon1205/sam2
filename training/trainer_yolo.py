@@ -165,6 +165,7 @@ class Trainer_yolo:
         optim_overrides: Optional[List[Dict[str, Any]]] = None,
         meters: Optional[Dict[str, Any]] = None,
         loss: Optional[Dict[str, Any]] = None,
+        validator: Dict[str, Any],
     ):
 
         self._setup_env_variables(env_variables)
@@ -183,6 +184,7 @@ class Trainer_yolo:
         distributed = DistributedConf(**distributed or {})
         cuda = CudaConf(**cuda or {})
         self.where = 0.0
+        self.validator_conf = validator
 
         self._infer_distributed_backend_if_none(distributed, accelerator)
 
@@ -456,11 +458,22 @@ class Trainer_yolo:
     ):
 
         outputs = model(batch)
+        # print("outputs:", outputs[0].shape, outputs[1].shape, outputs[2].shape)
+        # print("outputs[0]:", outputs[0].shape)
+        # print("outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
+        # print("outputs[0].device:", outputs[0].device)
+        # sys.exit()
         # for outputs_i in outputs:
         #     for i_mpmhs in range(len(outputs_i["multistep_pred_multimasks_high_res"])):
         #         print(f"outputs[multistep_pred_multimasks_high_res][{i_mpmhs}]:", outputs_i["multistep_pred_multimasks_high_res"][i_mpmhs].shape)
         targets = batch.gtdata
-        # print("targets:", targets.shape)
+        # print("self.device:", self.device)
+        for tkey, tvalue in targets.items():
+            if isinstance(tvalue, torch.Tensor):
+                # 創建新的張量並更新字典中的值
+                targets[tkey] = tvalue.to(self.device)
+                # print(f"Key: {tkey}, Device: {targets[tkey].device}")
+
         batch_size = len(batch.img_batch)
 
         key = batch.dict_key  # key for dataset
@@ -502,6 +515,16 @@ class Trainer_yolo:
                         find_metadatas=batch.metadata,
                     )
 
+        # print("2outputs[0]:", outputs[0].shape)
+        # print("2outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
+
+        nms_outputs = self.validator.postprocess(outputs)
+        # for i_preds in range(len(nms_outputs)):
+        #     print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds].shape}")
+        # print("nms_outputs.device:", nms_outputs.device)
+        self.validator.update_metrics(nms_outputs, targets)
+        # sys.exit()
+        
         return ret_tuple
 
     def run(self):
@@ -745,6 +768,14 @@ class Trainer_yolo:
         self.model.train()
         end = time.time()
 
+        # print("self.loss[all].loss:", self.loss["all"].loss)
+        # sys.exit()
+        self.loss["all"].loss.device = self.device
+        self.loss["all"].loss.bbox_loss = self.loss["all"].loss.bbox_loss.to(self.device)
+        self.loss["all"].loss.proj = self.loss["all"].loss.proj.to(self.device)
+        self.validator.device = self.device
+        self.validator.init_metrics()
+
         for data_iter, batch in enumerate(train_loader):
             # measure data loading time
             data_time_meter.update(time.time() - end)
@@ -837,6 +868,12 @@ class Trainer_yolo:
         out_dict.update(self._get_trainer_state(phase))
         logging.info(f"Losses and meters: {out_dict}")
         self._reset_meters([phase])
+
+        stats = self.validator.get_stats()
+        self.validator.check_stats(stats)
+        self.validator.finalize_metrics()
+        self.validator.print_results()
+
         return out_dict
 
     def _log_sync_data_times(self, phase, data_times):
@@ -881,7 +918,7 @@ class Trainer_yolo:
         # print("loss_key:", loss_key)
         # print("loss:", loss)
         # print("batch_size:", batch_size)
-        print("extra_losses:", extra_losses)
+        # print("extra_losses:", extra_losses)
         # sys.exit()
 
         if not math.isfinite(loss.item()):
@@ -1033,6 +1070,10 @@ class Trainer_yolo:
         self.gradient_logger = (
             instantiate(self.optim_conf.gradient_logger) if self.optim_conf else None
         )
+
+        self.validator = instantiate(self.validator_conf)
+        # print("self.validator.names:", self.validator.names)
+        # sys.exit()
 
         logging.info("Finished setting up components: Model, loss, optim, meters etc.")
 

@@ -36,6 +36,7 @@ class Detection_head(nn.Module):
         """
         super().__init__()
         self.detect = Detect(nc=nc, ch=ch)
+        self.detect.export = True
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(
                 transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
