@@ -384,12 +384,17 @@ class Trainer_yolo:
 
     def load_checkpoint(self):
         ckpt_path = get_resume_checkpoint(self.checkpoint_conf.save_dir)
+        # print("ckpt_path:", ckpt_path)
         if ckpt_path is None:
             self._init_model_state()
+            # print("yes")
         else:
+            # print("self.checkpoint_conf.initialize_after_preemption:", self.checkpoint_conf.initialize_after_preemption)
             if self.checkpoint_conf.initialize_after_preemption:
                 self._call_model_initializer()
             self._load_resuming_checkpoint(ckpt_path)
+            # print("no")
+        # sys.exit()
 
     def _init_model_state(self):
         # Checking that parameters that won't be saved are indeed frozen
@@ -424,7 +429,7 @@ class Trainer_yolo:
 
     def _load_resuming_checkpoint(self, ckpt_path: str):
         logging.info(f"Resuming training from {ckpt_path}")
-
+        # sys.exit()
         with g_pathmgr.open(ckpt_path, "rb") as f:
             checkpoint = torch.load(f, map_location="cpu")
         load_state_dict_into_model(
@@ -435,6 +440,7 @@ class Trainer_yolo:
 
         self.optim.optimizer.load_state_dict(checkpoint["optimizer"])
         self.loss.load_state_dict(checkpoint["loss"], strict=True)
+
         self.epoch = checkpoint["epoch"]
         self.steps = checkpoint["steps"]
         self.ckpt_time_elapsed = checkpoint.get("time_elapsed")
@@ -520,9 +526,14 @@ class Trainer_yolo:
 
         nms_outputs = self.validator.postprocess(outputs)
         # for i_preds in range(len(nms_outputs)):
-        #     print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds].shape}")
-        # print("nms_outputs.device:", nms_outputs.device)
+        #     print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
+        #     print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
+        #     print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
         self.validator.update_metrics(nms_outputs, targets)
+        # stats = self.validator.get_stats()
+        # self.validator.check_stats(stats)
+        # self.validator.finalize_metrics()
+        # self.validator.print_results()
         # sys.exit()
         
         return ret_tuple
@@ -551,12 +562,14 @@ class Trainer_yolo:
 
         if self.mode in ["train", "val"]:
             self.val_dataset = instantiate(self.data_conf.get(Phase.VAL, None))
-
+            # print("self.val_dataset:", self.val_dataset)
+            # sys.exit()
         if self.mode in ["train", "train_only"]:
             self.train_dataset = instantiate(self.data_conf.train)
 
     def run_train(self):
-
+        # print("self.epoch:", self.epoch)
+        # print("self.max_epochs:", self.max_epochs)
         while self.epoch < self.max_epochs:
             dataloader = self.train_dataset.get_loader(epoch=int(self.epoch))
             barrier()
@@ -645,13 +658,20 @@ class Trainer_yolo:
 
         end = time.time()
 
+        # print("self.loss:", self.loss)
+        # self.loss["val"].loss.device = self.device
+        # self.loss["val"].loss.bbox_loss = self.loss["val"].loss.bbox_loss.to(self.device)
+        # self.loss["val"].loss.proj = self.loss["val"].loss.proj.to(self.device)
+        self.validator.init_metrics()
+
         for data_iter, batch in enumerate(val_loader):
 
             # measure data loading time
             data_time.update(time.time() - end)
 
             batch = batch.to(self.device, non_blocking=True)
-
+            # print("batch:", batch)
+            # sys.exit()
             # compute output
             with torch.no_grad():
                 with torch.cuda.amp.autocast(
@@ -722,6 +742,12 @@ class Trainer_yolo:
             out_dict.update(self._get_trainer_state(phase))
         self._reset_meters(curr_phases)
         logging.info(f"Meters: {out_dict}")
+
+        stats = self.validator.get_stats()
+        self.validator.check_stats(stats)
+        self.validator.finalize_metrics()
+        self.validator.print_results()
+
         return out_dict
 
     def _get_trainer_state(self, phase):
@@ -770,10 +796,10 @@ class Trainer_yolo:
 
         # print("self.loss[all].loss:", self.loss["all"].loss)
         # sys.exit()
-        self.loss["all"].loss.device = self.device
-        self.loss["all"].loss.bbox_loss = self.loss["all"].loss.bbox_loss.to(self.device)
-        self.loss["all"].loss.proj = self.loss["all"].loss.proj.to(self.device)
-        self.validator.device = self.device
+        # self.loss["all"].loss.device = self.device
+        # self.loss["all"].loss.bbox_loss = self.loss["all"].loss.bbox_loss.to(self.device)
+        # self.loss["all"].loss.proj = self.loss["all"].loss.proj.to(self.device)
+        # self.validator.device = self.device
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(train_loader):
@@ -1072,7 +1098,19 @@ class Trainer_yolo:
         )
 
         self.validator = instantiate(self.validator_conf)
+        # print("self.loss:", self.loss)
+        # sys.exit()
+        #["train", "train_only", "val"]
+        self.loss["all"].loss.device = self.device
+        self.loss["all"].loss.bbox_loss = self.loss["all"].loss.bbox_loss.to(self.device)
+        self.loss["all"].loss.proj = self.loss["all"].loss.proj.to(self.device)
+        self.loss["val"].loss.device = self.device
+        self.loss["val"].loss.bbox_loss = self.loss["val"].loss.bbox_loss.to(self.device)
+        self.loss["val"].loss.proj = self.loss["val"].loss.proj.to(self.device)
+        self.validator.device = self.device
+
         # print("self.validator.names:", self.validator.names)
+        # print("self.device:", self.device)
         # sys.exit()
 
         logging.info("Finished setting up components: Model, loss, optim, meters etc.")

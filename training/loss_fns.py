@@ -334,6 +334,7 @@ class DetectionLoss(nn.Module):
         self,
         nc=10,  # 假设检测类别数为 80
         ch=[256, 64, 32],  # 假设有三个检测层，通道数分别为 256, 64, 32
+        stride=[16., 8., 4.],
         box=7.5,
         cls=0.5,
         dfl=1.5,
@@ -343,7 +344,7 @@ class DetectionLoss(nn.Module):
         wrapped_model = WrappedModel(detect_module)
         self.loss = v8DetectionLoss(wrapped_model)
         self.loss.hyp = HypParams(box=box, cls=cls, dfl=dfl)
-        self.loss.stride = [16, 8, 4] # 1024/64, 1024/128, 1024/256
+        self.loss.stride = stride # 1024/64, 1024/128, 1024/256
 
     def forward(self, preds, batch):
         #"/home/si2/anaconda3/envs/sam2/lib/python3.10/site-packages/ultralytics/utils/loss.py / class v8DetectionLoss / def __call__(self, preds, batch, detach=True):"

@@ -95,6 +95,9 @@ class SAM2Base_yolo(torch.nn.Module):
         # extra arguments used to construct the SAM mask decoder; if not None, it should be a dict of kwargs to be passed into `MaskDecoder` class.
         sam_mask_decoder_extra_args=None,
         compile_image_encoder: bool = False,
+        detect_nc = 10,
+        detect_ch = [256, 64, 32],
+        detect_stride = [16., 8., 4.],
     ):
         super().__init__()
 
@@ -180,6 +183,9 @@ class SAM2Base_yolo(torch.nn.Module):
             self.no_obj_embed_spatial = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
             trunc_normal_(self.no_obj_embed_spatial, std=0.02)
 
+        self.detect_nc = detect_nc
+        self.detect_ch = detect_ch
+        self.detect_stride = detect_stride
         self._build_yolo_heads()
         self.max_cond_frames_in_attn = max_cond_frames_in_attn
 
@@ -243,8 +249,9 @@ class SAM2Base_yolo(torch.nn.Module):
 
         self.yolo_detection_head = Detection_head(
             transformer_dim=self.sam_prompt_embed_dim,
-            # nc=self.nc,
-            # ch=self.ch,
+            nc=self.detect_nc,
+            ch=self.detect_ch,
+            stride=self.detect_stride,
         )
 
         if self.use_obj_ptrs_in_encoder:
@@ -449,11 +456,17 @@ class SAM2Base_yolo(torch.nn.Module):
             image_embeddings=backbone_features,
             high_res_features=high_res_features,
         )
+        if not self.training:
+            return x_preds
+        # print("self.training:", self.training)
+        # print("x_preds[0]:", x_preds[0].shape)
+        # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
         y_preds = self.yolo_detection_head.detect._inference(x_preds)
         # print("y_preds[0]:", y_preds[0].shape)
         # print("y_preds[1]:", y_preds[1][0].shape, y_preds[1][1].shape, y_preds[1][2].shape)
 
         return (y_preds, x_preds)
+        # return x_preds
 
     def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
         """

@@ -78,17 +78,20 @@ class maP50_Validator:
         # print("imgsz:", imgsz)#, imgsz.shape)
         # print("ratio_pad:", ratio_pad)#, ratio_pad.shape)
         # sys.exit()
+        if cls.ndim <= 0:
+            # print("si:", si)
+            return None
         if len(cls):
             bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
-            ops.scale_boxes(imgsz, bbox, ori_shape)#, ratio_pad=ratio_pad)  # native-space labels
+            # ops.scale_boxes(imgsz, bbox, ori_shape)#, ratio_pad=ratio_pad)  # native-space labels
         return {"cls": cls, "bbox": bbox, "ori_shape": ori_shape, "imgsz": imgsz}#, "ratio_pad": ratio_pad}
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
         predn = pred.clone()
-        ops.scale_boxes(
-            pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"] #, ratio_pad=pbatch["ratio_pad"]
-        )  # native-space pred
+        # ops.scale_boxes(
+        #     pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"] #, ratio_pad=pbatch["ratio_pad"]
+        # )  # native-space pred
         return predn
 
     def update_metrics(self, preds, batch):
@@ -102,7 +105,14 @@ class maP50_Validator:
                 tp=torch.zeros(npr, self.niou, dtype=torch.bool, device=self.device),
             )
             pbatch = self._prepare_batch(si, batch)
+            if pbatch == None:
+                self.seen -= 1
+                # print("====================================================================")
+                # print("                    NO            PREDICTION                        ")
+                # print("====================================================================")
+                continue
             cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+            # print(f"GT bbox: {bbox.min().item(), bbox.max().item()}")  # Ground Truth bbox
             nl = len(cls)
             stat["target_cls"] = cls
             stat["target_img"] = cls.unique()
@@ -128,6 +138,10 @@ class maP50_Validator:
             #     self.confusion_matrix.process_batch(predn, bbox, cls)
             for k in self.stats.keys():
                 self.stats[k].append(stat[k])
+        # print(f"TP: {self.stats['tp']}")
+        # print(f"Conf: {self.stats['conf']}")
+        # print(f"Pred cls: {self.stats['pred_cls']}")
+        # print(f"Target cls: {self.stats['target_cls']}")
     
     def finalize_metrics(self, *args, **kwargs):
         """Set final values for metrics speed and confusion matrix."""
@@ -135,7 +149,8 @@ class maP50_Validator:
 
     def get_stats(self):
         """Returns metrics statistics and results dictionary."""
-        stats = {k: torch.cat(v, 0).cpu().numpy() for k, v in self.stats.items()}  # to numpy
+        # self.stats = self.stats.detach()
+        stats = {k: torch.cat(v, 0).detach().cpu().numpy() for k, v in self.stats.items()}  # to numpy
         self.nt_per_class = np.bincount(stats["target_cls"].astype(int), minlength=self.nc)
         self.nt_per_image = np.bincount(stats["target_img"].astype(int), minlength=self.nc)
         stats.pop("target_img", None)
@@ -166,6 +181,7 @@ class maP50_Validator:
         correct_class = true_classes[:, None] == pred_classes
         iou = iou * correct_class  # zero out the wrong classes
         iou = iou.cpu().numpy()
+        # print(f"IoU matrix: {iou}")
         for i, threshold in enumerate(self.iouv.cpu().tolist()):
             if use_scipy:
                 # WARNING: known issue that reduces mAP in https://github.com/ultralytics/ultralytics/pull/4708
@@ -187,6 +203,7 @@ class maP50_Validator:
                         # matches = matches[matches[:, 2].argsort()[::-1]]
                         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
                     correct[matches[:, 1].astype(int), i] = True
+        # print("correct:", correct)
         return torch.tensor(correct, dtype=torch.bool, device=pred_classes.device)
     
     def print_results(self):
@@ -195,5 +212,7 @@ class maP50_Validator:
         # print("self.nt_per_class.sum(): ", self.nt_per_class.sum())
         # print("*self.metrics.mean_results(): ", *self.metrics.mean_results())
         result = self.metrics.mean_results()
+        print("====================================================================")
         print(f"Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})")
+        print("====================================================================")
         # sys.exit()

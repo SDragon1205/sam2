@@ -12,6 +12,8 @@ scratch:
   num_epochs: 40
   reverse_time_prob: 0.5
   nc: 10
+  ch: [256, 64, 32]
+  stride: [16., 8., 4.]  # 1024/64, 1024/128, 1024/256
   names:
     0: "pedestrian"
     1: "people"
@@ -30,10 +32,16 @@ scratch:
 #   gt_folder: null  # PATH to MOSE Annotations folder
 #   file_list_txt: training/assets/MOSE_sample_train_list.txt # Optional PATH to filelist containing a subset of videos to be used for training
 #   multiplier: 2
-sa1b_dataset:
+sa1b_dataset_train:
   # PATHS to Dataset
   img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
   gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+
+sa1b_dataset_val:
+  # PATHS to Dataset
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
 
 sav_dataset:
@@ -43,7 +51,7 @@ sav_dataset:
   multiplier: 1
 
 # Video transforms
-vos:
+vos_train:
   train_transforms:
     - _target_: training.dataset.transforms.ComposeAPI
       transforms:
@@ -73,6 +81,41 @@ vos:
           contrast: 0.05
           saturation: 0.05
           hue: null
+        - _target_: training.dataset.transforms.ToTensorAPI_yolo
+        - _target_: training.dataset.transforms.NormalizeAPI_yolo
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+
+vos_val:
+  train_transforms:
+    - _target_: training.dataset.transforms.ComposeAPI
+      transforms:
+        # - _target_: training.dataset.transforms.RandomHorizontalFlip_yolo
+        #   consistent_transform: True
+        # # - _target_: training.dataset.transforms.RandomAffine
+        # #   degrees: 25
+        # #   shear: 20
+        # #   image_interpolation: bilinear
+        # #   consistent_transform: True
+        - _target_: training.dataset.transforms.RandomResizeAPI_yolo
+          sizes: ${scratch.resolution}
+          square: true
+          consistent_transform: True
+        # - _target_: training.dataset.transforms.ColorJitter_yolo
+        #   consistent_transform: True
+        #   brightness: 0.1
+        #   contrast: 0.03
+        #   saturation: 0.03
+        #   hue: null
+        # - _target_: training.dataset.transforms.RandomGrayscale_yolo
+        #   p: 0.05
+        #   consistent_transform: True
+        # - _target_: training.dataset.transforms.ColorJitter_yolo
+        #   consistent_transform: False
+        #   brightness: 0.1
+        #   contrast: 0.05
+        #   saturation: 0.05
+        #   hue: null
         - _target_: training.dataset.transforms.ToTensorAPI_yolo
         - _target_: training.dataset.transforms.NormalizeAPI_yolo
           mean: [0.485, 0.456, 0.406]
@@ -115,7 +158,7 @@ vos:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: train_only
+  mode: val #train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -257,6 +300,10 @@ trainer:
     num_init_cond_frames_for_eval: 1  # only mask on the first frame
     forward_backbone_per_frame_for_eval: True
 
+    detect_nc: ${scratch.nc}
+    detect_ch: ${scratch.ch}
+    detect_stride: ${scratch.stride}
+
   validator:
     _target_: training.validator.maP50_Validator
     save_dir: "./maP50"
@@ -281,14 +328,14 @@ trainer:
         training: true
         video_dataset:
           _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-          img_folder: ${sa1b_dataset.img_folder}
-          gt_folder: ${sa1b_dataset.gt_folder}
+          img_folder: ${sa1b_dataset_train.img_folder}
+          gt_folder: ${sa1b_dataset_train.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
         sampler:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
           num_frames: 1
-        transforms: ${vos.train_transforms}
-        multiplier: ${sa1b_dataset.multiplier}
+        transforms: ${vos_train.train_transforms}
+        multiplier: ${sa1b_dataset_train.multiplier}
       # # SA-V as an example of a video dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
       #   training: true
@@ -302,7 +349,7 @@ trainer:
       #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
       #     num_frames: ${scratch.num_frames} # Number of frames per video
       #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
-      #   transforms: ${vos.train_transforms}
+      #   transforms: ${vos_train.train_transforms}
       #   multiplier: ${sav_dataset.multiplier}
       shuffle: True
       num_workers: ${scratch.num_train_workers}
@@ -312,6 +359,51 @@ trainer:
         _target_: training.utils.data_utils.collate_fn_yolo
         _partial_: true
         dict_key: all
+
+    val: #train:
+      _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset 
+      phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
+      batch_sizes: # List of batch sizes corresponding to each dataset
+      # - ${scratch.train_batch_size} # Batch size of dataset 1
+      - ${scratch.train_batch_size} # Batch size of dataset 2
+      datasets:
+      # SA1B as an example of an image dataset
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+          img_folder: ${sa1b_dataset_val.img_folder}
+          gt_folder: ${sa1b_dataset_val.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: 1
+        transforms: ${vos_val.train_transforms}
+        multiplier: ${sa1b_dataset_val.multiplier}
+      # # SA-V as an example of a video dataset
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: true
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset.img_folder}
+      #     gt_folder: ${sav_dataset.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.num_frames} # Number of frames per video
+      #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+      #   transforms: ${vos_val.train_transforms}
+      #   multiplier: ${sav_dataset.multiplier}
+      shuffle: False
+      num_workers: ${scratch.num_train_workers}
+      pin_memory: True
+      drop_last: True
+      collate_fn:
+        _target_: training.utils.data_utils.collate_fn_yolo
+        _partial_: true
+        dict_key: val #all
+
     distributed:
       backend: nccl
       find_unused_parameters: True
@@ -366,10 +458,20 @@ trainer:
     all:
       _target_: training.loss_fns.DetectionLoss
       nc: ${scratch.nc}  # 假设检测类别数为 80
-      ch: [256, 64, 32]  # 假设有三个检测层，通道数分别为 256, 64, 32
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      stride: ${scratch.stride}
       box: 7.5
       cls: 0.5
       dfl: 1.5
+    val:
+      _target_: training.loss_fns.DetectionLoss
+      nc: ${scratch.nc}  # 假设检测类别数为 80
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      stride: ${scratch.stride}
+      box: 7.5
+      cls: 0.5
+      dfl: 1.5
+
 
   distributed:
     backend: nccl

@@ -66,6 +66,9 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # of all frames at once. This avoids backbone OOM errors on very long videos in evaluation, but could be slightly slower.
         forward_backbone_per_frame_for_eval=False,
         freeze_image_encoder=False,
+        # detect_nc = 10,
+        # detect_ch = [256, 64, 32],
+        # detect_stride = [16., 8., 4.],
         **kwargs,
     ):
         super().__init__(image_encoder, memory_attention, memory_encoder, **kwargs)
@@ -105,14 +108,15 @@ class SAM2Train_yolo(SAM2Base_yolo):
                 p.requires_grad = False
 
     def forward(self, input: BatchedVideoDatapoint_yolo):
-        if self.training or not self.forward_backbone_per_frame_for_eval:
-            # precompute image features on all frames before tracking
-            # print("input.flat_img_batch.shape", input.flat_img_batch.shape)
-            # sys.exit()
-            backbone_out = self.forward_image(input.flat_img_batch)
-        else:
-            # defer image feature computation on a frame until it's being tracked
-            backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
+        # if self.training or not self.forward_backbone_per_frame_for_eval:
+        #     # precompute image features on all frames before tracking
+        #     # print("input.flat_img_batch.shape", input.flat_img_batch.shape)
+        #     # sys.exit()
+        #     backbone_out = self.forward_image(input.flat_img_batch)
+        # else:
+        #     # defer image feature computation on a frame until it's being tracked
+        #     backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
+        backbone_out = self.forward_image(input.flat_img_batch)
         backbone_out = self.prepare_prompt_inputs(backbone_out, input)
         previous_stages_out = self.forward_tracking(backbone_out, input)
 
@@ -321,6 +325,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
         hw_size0 = backbone_out['backbone_fpn'][0].shape[2]
         hw_size1 = backbone_out['backbone_fpn'][1].shape[2]
         hw_size2 = backbone_out['backbone_fpn'][2].shape[2]
+        # print(f"batch_size:{batch_size}, hw_size0:{hw_size0}, hw_size1:{hw_size1}, hw_size2:{hw_size2}")
         # 14 = 10(nc) + 4(xywh)
         # 74 = 10(nc) + 16(reg_max) * 4 = 10 + 64
         all_frame_outputs = (
@@ -331,6 +336,11 @@ class SAM2Train_yolo(SAM2Base_yolo):
                 torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device)
             ]
         )
+        # all_frame_outputs = [
+        #     torch.zeros(batch_size, 74, hw_size2, hw_size2, device=self.device),
+        #     torch.zeros(batch_size, 74, hw_size1, hw_size1, device=self.device),
+        #     torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device)
+        # ]
 
         for stage_id in processing_order:
             # Get the image features for the current frames
@@ -389,6 +399,9 @@ class SAM2Train_yolo(SAM2Base_yolo):
                 all_frame_outputs[1][0][i_img_ids] = current_out[1][0][output_idx]
                 all_frame_outputs[1][1][i_img_ids] = current_out[1][1][output_idx]
                 all_frame_outputs[1][2][i_img_ids] = current_out[1][2][output_idx]
+                # all_frame_outputs[0][i_img_ids] = current_out[0][output_idx]
+                # all_frame_outputs[1][i_img_ids] = current_out[1][output_idx]
+                # all_frame_outputs[2][i_img_ids] = current_out[2][output_idx]
                 output_idx = output_idx + 1
 
         if return_dict:

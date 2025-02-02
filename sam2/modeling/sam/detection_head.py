@@ -23,7 +23,7 @@ class Detection_head(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         nc=10,
         ch=[256, 64, 32],
-
+        stride=[16., 8., 4.],
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -36,7 +36,8 @@ class Detection_head(nn.Module):
         """
         super().__init__()
         self.detect = Detect(nc=nc, ch=ch)
-        self.detect.export = True
+        self.detect.stride = stride
+        # self.detect.export = True
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(
                 transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
