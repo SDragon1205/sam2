@@ -20,14 +20,14 @@ scratch:
 #   multiplier: 2
 sa1b_dataset:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/sam2/sav_dataset/sa1b/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/sam2/sav_dataset/sa1b/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/sav_dataset/sa1b/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/sav_dataset/sa1b/"  # PATH to MOSE Annotations folder
   multiplier: 1
 
 sav_dataset:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/sam2/sav_dataset/sav_train/sav_000_image/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/sam2/sav_dataset/sav_train/sav_000/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/sav_dataset/sav_train/sav_000_image/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/sav_dataset/sav_train/sav_000/"  # PATH to MOSE Annotations folder
   multiplier: 1
 
 # Video transforms
@@ -218,36 +218,36 @@ trainer:
       batch_sizes:
         - ${scratch.train_batch_size}
       datasets:
-        # SA1B as an example of an image dataset
-        - _target_: training.dataset.vos_dataset.VOSDataset
-          training: true
-          video_dataset:
-            _target_: training.dataset.vos_raw_dataset.SA1BRawDataset
-            img_folder: ${sa1b_dataset.img_folder}
-            gt_folder: ${sa1b_dataset.gt_folder}
-            # file_list_txt: ${path_to_train_filelist} # Optional
-          sampler:
-            _target_: training.dataset.vos_sampler.RandomUniformSampler
-            num_frames: 1
-            max_num_objects: ${scratch.max_num_objects}
-          transforms: ${vos.train_transforms}
-          multiplier: ${sa1b_dataset.multiplier}
-        # # SA-V as an example of a video dataset
+        # # SA1B as an example of an image dataset
         # - _target_: training.dataset.vos_dataset.VOSDataset
         #   training: true
         #   video_dataset:
-        #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset
-        #     img_folder: ${sav_dataset.img_folder}
-        #     gt_folder: ${sav_dataset.gt_folder}
+        #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset
+        #     img_folder: ${sa1b_dataset.img_folder}
+        #     gt_folder: ${sa1b_dataset.gt_folder}
         #     # file_list_txt: ${path_to_train_filelist} # Optional
-        #     ann_every: 4
         #   sampler:
         #     _target_: training.dataset.vos_sampler.RandomUniformSampler
-        #     num_frames: ${scratch.num_frames} # Number of frames per video
+        #     num_frames: 1
         #     max_num_objects: ${scratch.max_num_objects}
-        #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
         #   transforms: ${vos.train_transforms}
-        #   multiplier: ${sav_dataset.multiplier}
+        #   multiplier: ${sa1b_dataset.multiplier}
+        # SA-V as an example of a video dataset
+        - _target_: training.dataset.vos_dataset.VOSDataset
+          training: true
+          video_dataset:
+            _target_: training.dataset.vos_raw_dataset.JSONRawDataset
+            img_folder: ${sav_dataset.img_folder}
+            gt_folder: ${sav_dataset.gt_folder}
+            # file_list_txt: ${path_to_train_filelist} # Optional
+            ann_every: 4
+          sampler:
+            _target_: training.dataset.vos_sampler.RandomUniformSampler
+            num_frames: ${scratch.num_frames} # Number of frames per video
+            max_num_objects: ${scratch.max_num_objects}
+            reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+          transforms: ${vos.train_transforms}
+          multiplier: ${sav_dataset.multiplier}
       
         # - _target_: training.dataset.utils.RepeatFactorWrapper
         #   dataset:

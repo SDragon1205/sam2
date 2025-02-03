@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from sam2.modeling.sam.detection_head import Detection_head
 
+from iopath.common.file_io import g_pathmgr
+
 # 遞迴過濾函數
 def filter_nested_state_dict(state_dict, remove_prefix="sam_mask_decoder"):
     """
@@ -34,8 +36,10 @@ def filter_nested_state_dict(state_dict, remove_prefix="sam_mask_decoder"):
 # torch.save(old_state_dict, "old_model.pt")
 
 # 加載舊模型參數到新模型
-state_dict = torch.load("./checkpoints/sam2.1_hiera_base_plus.pt", map_location="cpu")
-
+# state_dict = torch.load("./checkpoints/sam2.1_hiera_base_plus.pt", map_location="cpu")
+ckpt_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolo_sam2.1_hiera_b+_MOSE_finetune.yaml/checkpoints/checkpoint.pt"
+with g_pathmgr.open(ckpt_path, "rb") as f:
+    state_dict = torch.load(f, map_location="cpu")
 # # 過濾掉嵌套結構中的 "sam_mask_decoder"
 # filtered_state_dict = filter_nested_state_dict(state_dict, remove_prefix="sam_mask_decoder")
 
@@ -66,9 +70,13 @@ for k, v in state_dict.items():  # 第一層
                 break  # 插入後結束第二層迴圈
         break  # 插入後結束第一層迴圈
 
-for k, v in state_dict.items():
-    for k1, v1 in v.items():
-        print(k1)
+# for k, v in state_dict.items():
+#     for k1, v1 in v.items():
+#         print(k1)
+loss = state_dict["loss"]
+print("loss:", loss)
+for k, v in loss.items():
+    print(f"k: {k}, v: {v}")
 
 # 保存新的 state_dict
-torch.save(state_dict, "./checkpoints/yolo_sam2.1_hiera_base_plus.pt")
+# torch.save(state_dict, "./checkpoints/yolo_sam2.1_hiera_base_plus.pt")

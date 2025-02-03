@@ -20,14 +20,14 @@ scratch:
 #   multiplier: 2
 sa1b_dataset:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/sam2/sav_dataset/sa1b/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/sam2/sav_dataset/sa1b/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/sav_dataset/sa1b/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/sav_dataset/sa1b/"  # PATH to MOSE Annotations folder
   multiplier: 1
 
 sav_dataset:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/sam2/sav_dataset/sav_train/sav_000_image/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/sam2/sav_dataset/sav_train/sav_000/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/sav_dataset/sav_train/sav_000_image/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/sav_dataset/sav_train/sav_000/"  # PATH to MOSE Annotations folder
   multiplier: 1
 
 # Video transforms
