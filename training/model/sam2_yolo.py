@@ -215,16 +215,17 @@ class SAM2Train_yolo(SAM2Base_yolo):
         #     )
         # backbone_out["use_pt_input"] = use_pt_input
 
-        # Sample initial conditioning frames
-        if num_init_cond_frames == 1:
-            init_cond_frames = [start_frame_idx]  # starting frame
-        else:
-            # starting frame + randomly selected remaining frames (without replacement)
-            init_cond_frames = [start_frame_idx] + self.rng.choice(
-                range(start_frame_idx + 1, num_frames),
-                num_init_cond_frames - 1,
-                replace=False,
-            ).tolist()
+        # # Sample initial conditioning frames
+        # if num_init_cond_frames == 1:
+        #     init_cond_frames = [start_frame_idx]  # starting frame
+        # else:
+        #     # starting frame + randomly selected remaining frames (without replacement)
+        #     init_cond_frames = [start_frame_idx] + self.rng.choice(
+        #         range(start_frame_idx + 1, num_frames),
+        #         num_init_cond_frames - 1,
+        #         replace=False,
+        #     ).tolist()
+        init_cond_frames = [start_frame_idx]
         backbone_out["init_cond_frames"] = init_cond_frames
         backbone_out["frames_not_in_init_cond"] = [
             t for t in range(start_frame_idx, num_frames) if t not in init_cond_frames
@@ -363,7 +364,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
                 )
 
             # Get output masks based on this frame's prompts and previous memory
-            current_out = self.track_step(
+            yolo_outputs, current_out = self.track_step(
                 frame_idx=stage_id,
                 is_init_cond_frame=stage_id in init_cond_frames,
                 current_vision_feats=current_vision_feats,
@@ -386,22 +387,23 @@ class SAM2Train_yolo(SAM2Base_yolo):
             else:
                 output_dict["non_cond_frame_outputs"][stage_id] = current_out
 
-            # for i_cur in range(len(current_out)):
-            #     print(f"current_out[{i_cur}]: {current_out[i_cur].shape}")
+            # for i_cur in range(len(yolo_outputs)):
+            #     print(f"yolo_outputs[{i_cur}]: {yolo_outputs[i_cur].shape}")
             #     print(f"all_frame_outputs[{i_cur}]: {all_frame_outputs[i_cur].shape}")
             output_idx = 0
             # print("all_frame_outputs[0].shape:", all_frame_outputs[0].shape)
-            # print("current_out[0].shape:", current_out[0].shape)
-            # print("current_out[0].device:", current_out[0].device)
+            # print("yolo_outputs[0].shape:", yolo_outputs[0].shape)
+            # print("yolo_outputs[0].device:", yolo_outputs[0].device)
             # print("all_frame_outputs[0].device:", all_frame_outputs[0].device)
+            # print("img_ids:", img_ids)
             for i_img_ids in img_ids:
-                all_frame_outputs[0][i_img_ids] = current_out[0][output_idx]
-                all_frame_outputs[1][0][i_img_ids] = current_out[1][0][output_idx]
-                all_frame_outputs[1][1][i_img_ids] = current_out[1][1][output_idx]
-                all_frame_outputs[1][2][i_img_ids] = current_out[1][2][output_idx]
-                # all_frame_outputs[0][i_img_ids] = current_out[0][output_idx]
-                # all_frame_outputs[1][i_img_ids] = current_out[1][output_idx]
-                # all_frame_outputs[2][i_img_ids] = current_out[2][output_idx]
+                all_frame_outputs[0][i_img_ids] = yolo_outputs[0][output_idx]
+                all_frame_outputs[1][0][i_img_ids] = yolo_outputs[1][0][output_idx]
+                all_frame_outputs[1][1][i_img_ids] = yolo_outputs[1][1][output_idx]
+                all_frame_outputs[1][2][i_img_ids] = yolo_outputs[1][2][output_idx]
+                # all_frame_outputs[0][i_img_ids] = yolo_outputs[0][output_idx]
+                # all_frame_outputs[1][i_img_ids] = yolo_outputs[1][output_idx]
+                # all_frame_outputs[2][i_img_ids] = yolo_outputs[2][output_idx]
                 output_idx = output_idx + 1
 
         if return_dict:
@@ -415,6 +417,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # all_frame_outputs = [
         #     {k: v for k, v in d.items() if k != "obj_ptr"} for d in all_frame_outputs
         # ]
+        # sys.exit()
 
         return all_frame_outputs
 
@@ -502,16 +505,18 @@ class SAM2Train_yolo(SAM2Base_yolo):
 
         # # Finally run the memory encoder on the predicted mask to encode
         # # it into a new memory feature (that can be used in future frames)
-        # self._encode_memory_in_output(
-        #     current_vision_feats,
-        #     feat_sizes,
-        #     # point_inputs,
-        #     run_mem_encoder,
-        #     high_res_masks,
-        #     object_score_logits,
-        #     current_out,
-        # )
-        return yolo_outputs
+        
+        current_out = self._encode_memory_in_output(
+            current_vision_feats,
+            feat_sizes,
+            # point_inputs,
+            run_mem_encoder,
+            # high_res_masks,
+            # object_score_logits,
+            # current_out,
+            yolo_outputs
+        )
+        return yolo_outputs, current_out
 
     # def _iter_correct_pt_sampling(
     #     self,

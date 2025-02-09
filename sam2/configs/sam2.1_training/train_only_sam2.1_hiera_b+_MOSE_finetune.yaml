@@ -5,7 +5,7 @@ scratch:
   train_batch_size: 2
   num_train_workers: 10
   num_frames: 2
-  max_num_objects: 3
+  max_num_objects: 1
   base_lr: 5.0e-6
   vision_lr: 3.0e-06
   phases_per_epoch: 1

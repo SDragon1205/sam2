@@ -392,6 +392,7 @@ class SAM2Base(torch.nn.Module):
             low_res_masks, high_res_masks = low_res_multimasks, high_res_multimasks
 
         # Extract object pointer from the SAM output token (with occlusion handling)
+        print("sam_output_token:", sam_output_token.shape)
         obj_ptr = self.obj_ptr_proj(sam_output_token)
         if self.pred_obj_scores:
             # Allow *soft* no obj ptr, unlike for masks
@@ -514,8 +515,8 @@ class SAM2Base(torch.nn.Module):
         device = current_vision_feats[-1].device
         # The case of `self.num_maskmem == 0` below is primarily used for reproducing SAM on images.
         # In this case, we skip the fusion with any memory.
-        # print("============================================================================")
-        # print("_prepare_memory_conditioned_features")
+        print("============================================================================")
+        print("_prepare_memory_conditioned_features")
         # print("self.num_maskmem:", self.num_maskmem)
         if self.num_maskmem == 0:  # Disable memory and skip fusion
             pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
@@ -524,7 +525,7 @@ class SAM2Base(torch.nn.Module):
         num_obj_ptr_tokens = 0
         tpos_sign_mul = -1 if track_in_reverse else 1
         # Step 1: condition the visual features of the current frame on previous memories
-        # print("is_init_cond_frame:", is_init_cond_frame)
+        print("is_init_cond_frame:", is_init_cond_frame)
         # sys.exit()
         if not is_init_cond_frame:
             # Retrieve the memories encoded with the maskmem backbone
@@ -533,11 +534,17 @@ class SAM2Base(torch.nn.Module):
             # when getting temporal positional embedding below)
             assert len(output_dict["cond_frame_outputs"]) > 0
             # Select a maximum number of temporally closest cond frames for cross attention
+            # print("output_dict:", output_dict)
+            
             cond_outputs = output_dict["cond_frame_outputs"]
+            print("self.max_cond_frames_in_attn:", self.max_cond_frames_in_attn)
             selected_cond_outputs, unselected_cond_outputs = select_closest_cond_frames(
                 frame_idx, cond_outputs, self.max_cond_frames_in_attn
             )
+            # print("selected_cond_outputs:", selected_cond_outputs)
+            # print("unselected_cond_outputs:", unselected_cond_outputs)
             t_pos_and_prevs = [(0, out) for out in selected_cond_outputs.values()]
+            # print("t_pos_and_prevs:", t_pos_and_prevs)
             # Add last (self.num_maskmem - 1) frames before current frame for non-conditioning memory
             # the earliest one has t_pos=1 and the latest one has t_pos=self.num_maskmem-1
             # We also allow taking the memory frame non-consecutively (with stride>1), in which case
@@ -567,12 +574,14 @@ class SAM2Base(torch.nn.Module):
                         prev_frame_idx = -(-(frame_idx + 2) // stride) * stride
                         # then seek further among every r-th frames
                         prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
+                print("prev_frame_idx:", prev_frame_idx)
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
                 if out is None:
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
                 t_pos_and_prevs.append((t_pos, out))
+            print("t_pos_and_prevs:", t_pos_and_prevs)
 
             for t_pos, prev in t_pos_and_prevs:
                 if prev is None:
@@ -591,7 +600,9 @@ class SAM2Base(torch.nn.Module):
                 to_cat_memory_pos_embed.append(maskmem_enc)
 
             # Construct the list of past object pointers
+            print("self.use_obj_ptrs_in_encoder:", self.use_obj_ptrs_in_encoder)
             if self.use_obj_ptrs_in_encoder:
+            # if False:
                 max_obj_ptrs_in_encoder = min(num_frames, self.max_obj_ptrs_in_encoder)
                 # First add those object pointers from selected conditioning frames
                 # (optionally, only include object pointers in the past during evaluation)
@@ -658,7 +669,7 @@ class SAM2Base(torch.nn.Module):
                     num_obj_ptr_tokens = 0
         else:
             # for initial conditioning frames, encode them without using any previous memory
-            # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
+            print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
             # print("current_vision_feats[-1]:", current_vision_feats[-1].shape)
             # print("self.no_mem_embed:", self.no_mem_embed.shape)
             if self.directly_add_no_mem_embed:
@@ -677,6 +688,7 @@ class SAM2Base(torch.nn.Module):
         memory = torch.cat(to_cat_memory, dim=0)
         memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
 
+        print("num_obj_ptr_tokens:", num_obj_ptr_tokens)
         pix_feat_with_mem = self.memory_attention(
             curr=current_vision_feats,
             curr_pos=current_vision_pos_embeds,
@@ -686,6 +698,8 @@ class SAM2Base(torch.nn.Module):
         )
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+        print("pix_feat_with_mem:", pix_feat_with_mem.shape)
+        sys.exit()
         return pix_feat_with_mem
 
     def _encode_new_memory(
@@ -696,6 +710,8 @@ class SAM2Base(torch.nn.Module):
         object_score_logits,
         is_mask_from_pts,
     ):
+        print("============================================================================")
+        print("_encode_new_memory")
         """Encode the current image and its prediction into a memory feature."""
         B = current_vision_feats[-1].size(1)  # batch size on this frame
         C = self.hidden_dim
@@ -716,18 +732,28 @@ class SAM2Base(torch.nn.Module):
         else:
             # apply sigmoid on the raw mask logits to turn them into range (0, 1)
             mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        # print("0mask_for_mem:", mask_for_mem)
         # apply scale and bias terms to the sigmoid probabilities
         if self.sigmoid_scale_for_mem_enc != 1.0:
             mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
+            print("self.sigmoid_scale_for_mem_enc:", self.sigmoid_scale_for_mem_enc)
         if self.sigmoid_bias_for_mem_enc != 0.0:
             mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
+            print("self.sigmoid_bias_for_mem_enc:", self.sigmoid_bias_for_mem_enc)
+
+        print("pix_feat:", pix_feat.shape)
+        print("mask_for_mem:", mask_for_mem.shape)
+        
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
+
         maskmem_features = maskmem_out["vision_features"]
         maskmem_pos_enc = maskmem_out["vision_pos_enc"]
         # add a no-object embedding to the spatial memory to indicate that the frame
         # is predicted to be occluded (i.e. no object is appearing in the frame)
+        print("self.no_obj_embed_spatial is not None:", self.no_obj_embed_spatial is not None)
+        print("self.no_obj_embed_spatial:", self.no_obj_embed_spatial)
         if self.no_obj_embed_spatial is not None:
             is_obj_appearing = (object_score_logits > 0).float()
             maskmem_features += (
@@ -735,6 +761,10 @@ class SAM2Base(torch.nn.Module):
             ) * self.no_obj_embed_spatial[..., None, None].expand(
                 *maskmem_features.shape
             )
+        print("maskmem_features:", maskmem_features.shape)
+        for i_maskmem_pos_enc in range(len(maskmem_pos_enc)):
+            print(f"maskmem_pos_enc[{i_maskmem_pos_enc}]:", maskmem_pos_enc[i_maskmem_pos_enc].shape)
+        # sys.exit()
 
         return maskmem_features, maskmem_pos_enc
 
@@ -762,11 +792,11 @@ class SAM2Base(torch.nn.Module):
         else:
             high_res_features = None
 
-        # print("============================================================================")
-        # print("_track_step")
+        print("============================================================================")
+        print("_track_step")
         # print("high_res_features:", len(high_res_features), high_res_features[0].shape, high_res_features[1].shape)
-        # print("mask_inputs is not None:", mask_inputs is not None)
-        # print("use_mask_input_as_output_without_sam:", self.use_mask_input_as_output_without_sam)
+        print("mask_inputs is not None:", mask_inputs is not None)
+        print("use_mask_input_as_output_without_sam:", self.use_mask_input_as_output_without_sam)
         # sys.exit()
 
         if mask_inputs is not None and self.use_mask_input_as_output_without_sam:

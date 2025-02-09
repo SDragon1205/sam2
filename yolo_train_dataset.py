@@ -64,7 +64,7 @@ def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float
 
     return img_pil
 
-def process_batched_video(batched_video):
+def visualize_batched_video(batched_video):
     """
     Process all videos and frames in the BatchedVideoDatapoint_yolo object.
     """
@@ -227,7 +227,7 @@ def main(cfg: DictConfig):
     # 5. 測試載入數據
     for batch in dataloader:
         print(batch)
-        result = process_batched_video(batch)
+        result = visualize_batched_video(batch)
         print(batch.flat_obj_to_img_idx)
         print(batch.gtdata)
         # for video_id, frame_id, img in result:

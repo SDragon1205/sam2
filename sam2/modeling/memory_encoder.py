@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from sam2.modeling.sam2_utils import DropPath, get_clones, LayerNorm2d
-
+import sys
 
 class MaskDownSampler(nn.Module):
     """
@@ -31,12 +31,14 @@ class MaskDownSampler(nn.Module):
         padding=0,
         total_stride=16,
         activation=nn.GELU,
+        in_chans=1,
     ):
         super().__init__()
         num_layers = int(math.log2(total_stride) // math.log2(stride))
         assert stride**num_layers == total_stride
         self.encoder = nn.Sequential()
-        mask_in_chans, mask_out_chans = 1, 1
+        # mask_in_chans, mask_out_chans = 1, 1
+        mask_in_chans, mask_out_chans = in_chans, in_chans
         for _ in range(num_layers):
             mask_out_chans = mask_in_chans * (stride**2)
             self.encoder.append(
@@ -55,6 +57,8 @@ class MaskDownSampler(nn.Module):
         self.encoder.append(nn.Conv2d(mask_out_chans, embed_dim, kernel_size=1))
 
     def forward(self, x):
+        # print("MaskDownSampler x:", x.shape)
+        # sys.exit()
         return self.encoder(x)
 
 

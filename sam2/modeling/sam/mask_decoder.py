@@ -197,8 +197,8 @@ class MaskDecoder(nn.Module):
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
-        # print("============================================================================")
-        # print("MaskDecoder")
+        print("============================================================================")
+        print("MaskDecoder")
         # print("tokens.shape[0]:", tokens.shape[0])
         # print("image_embeddings.shape[0]:", image_embeddings.shape[0])
         # sys.exit()
@@ -219,8 +219,10 @@ class MaskDecoder(nn.Module):
         # Run the transformer
         hs, src = self.transformer(src, pos_src, tokens)
         # print("2src.shape:", src.shape)
+        print("hs:", hs.shape)
         iou_token_out = hs[:, s, :]
         mask_tokens_out = hs[:, s + 1 : (s + 1 + self.num_mask_tokens), :]
+        print("mask_tokens_out:", mask_tokens_out.shape)
 
         # Upscale mask embeddings and predict masks using the mask tokens
         src = src.transpose(1, 2).view(b, c, h, w)

@@ -15,7 +15,8 @@ from sam2.modeling.sam.detection_head import Detection_head
 from sam2.modeling.sam.prompt_encoder import PromptEncoder
 from sam2.modeling.sam.transformer import TwoWayTransformer
 from sam2.modeling.sam2_utils import get_1d_sine_pe, MLP, select_closest_cond_frames
-
+from ultralytics.utils import ops
+import matplotlib.pyplot as plt
 import sys
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
@@ -561,6 +562,8 @@ class SAM2Base_yolo(torch.nn.Module):
         num_frames,
         track_in_reverse=False,  # tracking in reverse time order (for demo usage)
     ):
+        # print("============================================================================")
+        # print("_prepare_memory_conditioned_features")
         """Fuse the current frame's visual feature map with previous memory."""
         B = current_vision_feats[-1].size(1)  # batch size on this frame
         C = self.hidden_dim
@@ -575,6 +578,7 @@ class SAM2Base_yolo(torch.nn.Module):
         num_obj_ptr_tokens = 0
         tpos_sign_mul = -1 if track_in_reverse else 1
         # Step 1: condition the visual features of the current frame on previous memories
+        # print("is_init_cond_frame:", is_init_cond_frame)
         if not is_init_cond_frame:
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
@@ -583,6 +587,7 @@ class SAM2Base_yolo(torch.nn.Module):
             assert len(output_dict["cond_frame_outputs"]) > 0
             # Select a maximum number of temporally closest cond frames for cross attention
             cond_outputs = output_dict["cond_frame_outputs"]
+            # print("self.max_cond_frames_in_attn:", self.max_cond_frames_in_attn)
             selected_cond_outputs, unselected_cond_outputs = select_closest_cond_frames(
                 frame_idx, cond_outputs, self.max_cond_frames_in_attn
             )
@@ -616,12 +621,14 @@ class SAM2Base_yolo(torch.nn.Module):
                         prev_frame_idx = -(-(frame_idx + 2) // stride) * stride
                         # then seek further among every r-th frames
                         prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
+                # print("prev_frame_idx:", prev_frame_idx)
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
                 if out is None:
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
                 t_pos_and_prevs.append((t_pos, out))
+            # print("t_pos_and_prevs:", t_pos_and_prevs)
 
             for t_pos, prev in t_pos_and_prevs:
                 if prev is None:
@@ -639,74 +646,75 @@ class SAM2Base_yolo(torch.nn.Module):
                 )
                 to_cat_memory_pos_embed.append(maskmem_enc)
 
-            # Construct the list of past object pointers
-            if self.use_obj_ptrs_in_encoder:
-                max_obj_ptrs_in_encoder = min(num_frames, self.max_obj_ptrs_in_encoder)
-                # First add those object pointers from selected conditioning frames
-                # (optionally, only include object pointers in the past during evaluation)
-                if not self.training and self.only_obj_ptrs_in_the_past_for_eval:
-                    ptr_cond_outputs = {
-                        t: out
-                        for t, out in selected_cond_outputs.items()
-                        if (t >= frame_idx if track_in_reverse else t <= frame_idx)
-                    }
-                else:
-                    ptr_cond_outputs = selected_cond_outputs
-                pos_and_ptrs = [
-                    # Temporal pos encoding contains how far away each pointer is from current frame
-                    (
-                        (
-                            (frame_idx - t) * tpos_sign_mul
-                            if self.use_signed_tpos_enc_to_obj_ptrs
-                            else abs(frame_idx - t)
-                        ),
-                        out["obj_ptr"],
-                    )
-                    for t, out in ptr_cond_outputs.items()
-                ]
-                # Add up to (max_obj_ptrs_in_encoder - 1) non-conditioning frames before current frame
-                for t_diff in range(1, max_obj_ptrs_in_encoder):
-                    t = frame_idx + t_diff if track_in_reverse else frame_idx - t_diff
-                    if t < 0 or (num_frames is not None and t >= num_frames):
-                        break
-                    out = output_dict["non_cond_frame_outputs"].get(
-                        t, unselected_cond_outputs.get(t, None)
-                    )
-                    if out is not None:
-                        pos_and_ptrs.append((t_diff, out["obj_ptr"]))
-                # If we have at least one object pointer, add them to the across attention
-                if len(pos_and_ptrs) > 0:
-                    pos_list, ptrs_list = zip(*pos_and_ptrs)
-                    # stack object pointers along dim=0 into [ptr_seq_len, B, C] shape
-                    obj_ptrs = torch.stack(ptrs_list, dim=0)
-                    # a temporal positional embedding based on how far each object pointer is from
-                    # the current frame (sine embedding normalized by the max pointer num).
-                    if self.add_tpos_enc_to_obj_ptrs:
-                        t_diff_max = max_obj_ptrs_in_encoder - 1
-                        tpos_dim = C if self.proj_tpos_enc_in_obj_ptrs else self.mem_dim
-                        # obj_pos = torch.tensor(pos_list, device=device)
-                        obj_pos = torch.tensor(pos_list).to(
-                            device=device, non_blocking=True
-                        )
-                        obj_pos = get_1d_sine_pe(obj_pos / t_diff_max, dim=tpos_dim)
-                        obj_pos = self.obj_ptr_tpos_proj(obj_pos)
-                        obj_pos = obj_pos.unsqueeze(1).expand(-1, B, self.mem_dim)
-                    else:
-                        obj_pos = obj_ptrs.new_zeros(len(pos_list), B, self.mem_dim)
-                    if self.mem_dim < C:
-                        # split a pointer into (C // self.mem_dim) tokens for self.mem_dim < C
-                        obj_ptrs = obj_ptrs.reshape(
-                            -1, B, C // self.mem_dim, self.mem_dim
-                        )
-                        obj_ptrs = obj_ptrs.permute(0, 2, 1, 3).flatten(0, 1)
-                        obj_pos = obj_pos.repeat_interleave(C // self.mem_dim, dim=0)
-                    to_cat_memory.append(obj_ptrs)
-                    to_cat_memory_pos_embed.append(obj_pos)
-                    num_obj_ptr_tokens = obj_ptrs.shape[0]
-                else:
-                    num_obj_ptr_tokens = 0
+            # # Construct the list of past object pointers
+            # if self.use_obj_ptrs_in_encoder:
+            #     max_obj_ptrs_in_encoder = min(num_frames, self.max_obj_ptrs_in_encoder)
+            #     # First add those object pointers from selected conditioning frames
+            #     # (optionally, only include object pointers in the past during evaluation)
+            #     if not self.training and self.only_obj_ptrs_in_the_past_for_eval:
+            #         ptr_cond_outputs = {
+            #             t: out
+            #             for t, out in selected_cond_outputs.items()
+            #             if (t >= frame_idx if track_in_reverse else t <= frame_idx)
+            #         }
+            #     else:
+            #         ptr_cond_outputs = selected_cond_outputs
+            #     pos_and_ptrs = [
+            #         # Temporal pos encoding contains how far away each pointer is from current frame
+            #         (
+            #             (
+            #                 (frame_idx - t) * tpos_sign_mul
+            #                 if self.use_signed_tpos_enc_to_obj_ptrs
+            #                 else abs(frame_idx - t)
+            #             ),
+            #             out["obj_ptr"],
+            #         )
+            #         for t, out in ptr_cond_outputs.items()
+            #     ]
+            #     # Add up to (max_obj_ptrs_in_encoder - 1) non-conditioning frames before current frame
+            #     for t_diff in range(1, max_obj_ptrs_in_encoder):
+            #         t = frame_idx + t_diff if track_in_reverse else frame_idx - t_diff
+            #         if t < 0 or (num_frames is not None and t >= num_frames):
+            #             break
+            #         out = output_dict["non_cond_frame_outputs"].get(
+            #             t, unselected_cond_outputs.get(t, None)
+            #         )
+            #         if out is not None:
+            #             pos_and_ptrs.append((t_diff, out["obj_ptr"]))
+            #     # If we have at least one object pointer, add them to the across attention
+            #     if len(pos_and_ptrs) > 0:
+            #         pos_list, ptrs_list = zip(*pos_and_ptrs)
+            #         # stack object pointers along dim=0 into [ptr_seq_len, B, C] shape
+            #         obj_ptrs = torch.stack(ptrs_list, dim=0)
+            #         # a temporal positional embedding based on how far each object pointer is from
+            #         # the current frame (sine embedding normalized by the max pointer num).
+            #         if self.add_tpos_enc_to_obj_ptrs:
+            #             t_diff_max = max_obj_ptrs_in_encoder - 1
+            #             tpos_dim = C if self.proj_tpos_enc_in_obj_ptrs else self.mem_dim
+            #             # obj_pos = torch.tensor(pos_list, device=device)
+            #             obj_pos = torch.tensor(pos_list).to(
+            #                 device=device, non_blocking=True
+            #             )
+            #             obj_pos = get_1d_sine_pe(obj_pos / t_diff_max, dim=tpos_dim)
+            #             obj_pos = self.obj_ptr_tpos_proj(obj_pos)
+            #             obj_pos = obj_pos.unsqueeze(1).expand(-1, B, self.mem_dim)
+            #         else:
+            #             obj_pos = obj_ptrs.new_zeros(len(pos_list), B, self.mem_dim)
+            #         if self.mem_dim < C:
+            #             # split a pointer into (C // self.mem_dim) tokens for self.mem_dim < C
+            #             obj_ptrs = obj_ptrs.reshape(
+            #                 -1, B, C // self.mem_dim, self.mem_dim
+            #             )
+            #             obj_ptrs = obj_ptrs.permute(0, 2, 1, 3).flatten(0, 1)
+            #             obj_pos = obj_pos.repeat_interleave(C // self.mem_dim, dim=0)
+            #         to_cat_memory.append(obj_ptrs)
+            #         to_cat_memory_pos_embed.append(obj_pos)
+            #         num_obj_ptr_tokens = obj_ptrs.shape[0]
+            #     else:
+            #         num_obj_ptr_tokens = 0
         else:
             # for initial conditioning frames, encode them without using any previous memory
+            # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
             if self.directly_add_no_mem_embed:
                 # directly add no-mem embedding (instead of using the transformer encoder)
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
@@ -720,7 +728,7 @@ class SAM2Base_yolo(torch.nn.Module):
         # Step 2: Concatenate the memories and forward through the transformer encoder
         memory = torch.cat(to_cat_memory, dim=0)
         memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
-
+        # print("num_obj_ptr_tokens:", num_obj_ptr_tokens)
         pix_feat_with_mem = self.memory_attention(
             curr=current_vision_feats,
             curr_pos=current_vision_pos_embeds,
@@ -730,6 +738,8 @@ class SAM2Base_yolo(torch.nn.Module):
         )
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+        # print("pix_feat_with_mem:", pix_feat_with_mem.shape)
+        # sys.exit()
         return pix_feat_with_mem
 
     def _encode_new_memory(
@@ -737,8 +747,8 @@ class SAM2Base_yolo(torch.nn.Module):
         current_vision_feats,
         feat_sizes,
         pred_masks_high_res,
-        object_score_logits,
-        is_mask_from_pts,
+        # object_score_logits,
+        # is_mask_from_pts,
     ):
         """Encode the current image and its prediction into a memory feature."""
         B = current_vision_feats[-1].size(1)  # batch size on this frame
@@ -746,20 +756,21 @@ class SAM2Base_yolo(torch.nn.Module):
         H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
         pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
-        if self.non_overlap_masks_for_mem_enc and not self.training:
-            # optionally, apply non-overlapping constraints to the masks (it's applied
-            # in the batch dimension and should only be used during eval, where all
-            # the objects come from the same video under batch size 1).
-            pred_masks_high_res = self._apply_non_overlapping_constraints(
-                pred_masks_high_res
-            )
-        # scale the raw mask logits with a temperature before applying sigmoid
-        binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
-        if binarize and not self.training:
-            mask_for_mem = (pred_masks_high_res > 0).float()
-        else:
-            # apply sigmoid on the raw mask logits to turn them into range (0, 1)
-            mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        # if self.non_overlap_masks_for_mem_enc and not self.training:
+        #     # optionally, apply non-overlapping constraints to the masks (it's applied
+        #     # in the batch dimension and should only be used during eval, where all
+        #     # the objects come from the same video under batch size 1).
+        #     pred_masks_high_res = self._apply_non_overlapping_constraints(
+        #         pred_masks_high_res
+        #     )
+        # # scale the raw mask logits with a temperature before applying sigmoid
+        # binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
+        # if binarize and not self.training:
+        #     mask_for_mem = (pred_masks_high_res > 0).float()
+        # else:
+        #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
+        #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        mask_for_mem = pred_masks_high_res
         # apply scale and bias terms to the sigmoid probabilities
         if self.sigmoid_scale_for_mem_enc != 1.0:
             mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
@@ -770,15 +781,15 @@ class SAM2Base_yolo(torch.nn.Module):
         )
         maskmem_features = maskmem_out["vision_features"]
         maskmem_pos_enc = maskmem_out["vision_pos_enc"]
-        # add a no-object embedding to the spatial memory to indicate that the frame
-        # is predicted to be occluded (i.e. no object is appearing in the frame)
-        if self.no_obj_embed_spatial is not None:
-            is_obj_appearing = (object_score_logits > 0).float()
-            maskmem_features += (
-                1 - is_obj_appearing[..., None, None]
-            ) * self.no_obj_embed_spatial[..., None, None].expand(
-                *maskmem_features.shape
-            )
+        # # add a no-object embedding to the spatial memory to indicate that the frame
+        # # is predicted to be occluded (i.e. no object is appearing in the frame)
+        # if self.no_obj_embed_spatial is not None:
+        #     is_obj_appearing = (object_score_logits > 0).float()
+        #     maskmem_features += (
+        #         1 - is_obj_appearing[..., None, None]
+        #     ) * self.no_obj_embed_spatial[..., None, None].expand(
+        #         *maskmem_features.shape
+        #     )
 
         return maskmem_features, maskmem_pos_enc
 
@@ -857,30 +868,100 @@ class SAM2Base_yolo(torch.nn.Module):
 
         return yolo_outputs, high_res_features, pix_feat
 
+    
+    def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.25, iou=0.7, agnostic_nms=False, max_det=300):
+        # print("old_preds:", preds[0].shape, preds[1][0].shape, preds[1][1].shape, preds[1][2].shape)
+        preds = ops.non_max_suppression(
+            preds,
+            conf,
+            iou,
+            agnostic=agnostic_nms,
+            max_det=max_det,
+            # nc=self.detect_nc,
+        )
+        # preds = ops.non_max_suppression(
+        #     preds,
+        #     conf,
+        #     iou,
+        #     # labels=[],
+        #     # multi_label=True,
+        #     agnostic=agnostic_nms,
+        #     max_det=max_det,
+        # )
+        # for i_preds in range(len(preds)):
+        #     print(f"new_preds[{i_preds}]:", preds[i_preds])
+        #     print(f"new_preds[{i_preds}]:", preds[i_preds].shape)
+
+        high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)
+
+        for idx, pred in enumerate(preds):
+            for box in pred:
+                x1, y1, x2, y2, conf, cls = box
+                assert 0.0 <= conf <= 1.0, f"Confidence value {conf} is out of range [0, 1]"
+                cls = int(cls)
+
+                # 轉換座標為整數並限制在圖像範圍內
+                x1, y1, x2, y2 = map(lambda v: int(torch.clamp(v, 0, self.image_size - 1).item()), (x1, y1, x2, y2))
+
+                # 取出對應的類別通道，並填入 confidence，保留最大值
+                high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.maximum(
+                    high_res_masks[idx, cls, y1:y2+1, x1:x2+1], 
+                    conf
+                )
+        def visualize_output_tensor(output_tensor, batch_idx=0):
+            """
+            可視化特定 batch 的 output_tensor。
+
+            Args:
+                output_tensor (torch.Tensor): [batch_size, nc, 1024, 1024] 的張量。
+                batch_idx (int): 要可視化的 batch 索引，預設為 0。
+            """
+            nc = output_tensor.shape[1]  # 類別數量
+
+            plt.figure(figsize=(15, 5))
+            for cls_idx in range(nc):
+                plt.subplot(1, nc, cls_idx + 1)
+                img = output_tensor[batch_idx, cls_idx].cpu().detach().numpy()
+                plt.imshow(img, cmap='hot', interpolation='nearest')
+                plt.title(f'Class {cls_idx}')
+                plt.axis('off')
+
+            plt.tight_layout()
+            plt.show()
+            sys.exit()
+        # visualize_output_tensor(high_res_masks, 0)
+        # visualize_output_tensor(high_res_masks, 1)
+
+        return high_res_masks
+    
     def _encode_memory_in_output(
         self,
         current_vision_feats,
         feat_sizes,
-        point_inputs,
+        # point_inputs,
         run_mem_encoder,
-        high_res_masks,
-        object_score_logits,
-        current_out,
+        # high_res_masks,
+        # object_score_logits,
+        # current_out,
+        yolo_outputs,
     ):
         if run_mem_encoder and self.num_maskmem > 0:
-            high_res_masks_for_mem_enc = high_res_masks
+            high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                 current_vision_feats=current_vision_feats,
                 feat_sizes=feat_sizes,
                 pred_masks_high_res=high_res_masks_for_mem_enc,
-                object_score_logits=object_score_logits,
-                is_mask_from_pts=(point_inputs is not None),
+                # object_score_logits=object_score_logits,
+                # is_mask_from_pts=(point_inputs is not None),
             )
-            current_out["maskmem_features"] = maskmem_features
-            current_out["maskmem_pos_enc"] = maskmem_pos_enc
+            # current_out["maskmem_features"] = maskmem_features
+            # current_out["maskmem_pos_enc"] = maskmem_pos_enc
+            current_out = {"maskmem_features": maskmem_features, "maskmem_pos_enc": maskmem_pos_enc}
         else:
-            current_out["maskmem_features"] = None
-            current_out["maskmem_pos_enc"] = None
+            # current_out["maskmem_features"] = None
+            # current_out["maskmem_pos_enc"] = None
+            current_out = {"maskmem_features": None, "maskmem_pos_enc": None}
+        return current_out
 
     def track_step(
         self,

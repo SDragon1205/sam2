@@ -1,8 +1,8 @@
 scratch:
-  resolution: 640
-  train_batch_size: 4
+  resolution: 1024
+  train_batch_size: 2
   num_train_workers: 10
-  num_frames: 8
+  num_frames: 2
   max_num_objects: 3
   base_lr: 5.0e-6
   vision_lr: 3.0e-06
@@ -99,34 +99,34 @@ data:
     # - ${scratch.train_batch_size} # Batch size of dataset 1
     - ${scratch.train_batch_size} # Batch size of dataset 2
     datasets:
-    # SA1B as an example of an image dataset
-    - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      training: true
-      video_dataset:
-        _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-        img_folder: ${sa1b_dataset.img_folder}
-        gt_folder: ${sa1b_dataset.gt_folder}
-        # file_list_txt: ${path_to_train_filelist} # Optional
-      sampler:
-        _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-        num_frames: 1
-      transforms: ${vos.train_transforms}
-      multiplier: ${sa1b_dataset.multiplier}
-    # # SA-V as an example of a video dataset
+    # # SA1B as an example of an image dataset
     # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
     #   training: true
     #   video_dataset:
-    #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-    #     img_folder: ${sav_dataset.img_folder}
-    #     gt_folder: ${sav_dataset.gt_folder}
+    #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+    #     img_folder: ${sa1b_dataset.img_folder}
+    #     gt_folder: ${sa1b_dataset.gt_folder}
     #     # file_list_txt: ${path_to_train_filelist} # Optional
-    #     # ann_every: 4
     #   sampler:
     #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-    #     num_frames: ${scratch.num_frames} # Number of frames per video
-    #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+    #     num_frames: 1
     #   transforms: ${vos.train_transforms}
-    #   multiplier: ${sav_dataset.multiplier}
+    #   multiplier: ${sa1b_dataset.multiplier}
+    # SA-V as an example of a video dataset
+    - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      training: true
+      video_dataset:
+        _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+        img_folder: ${sav_dataset.img_folder}
+        gt_folder: ${sav_dataset.gt_folder}
+        # file_list_txt: ${path_to_train_filelist} # Optional
+        # ann_every: 4
+      sampler:
+        _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+        num_frames: ${scratch.num_frames} # Number of frames per video
+        reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+      transforms: ${vos.train_transforms}
+      multiplier: ${sav_dataset.multiplier}
     shuffle: True
     num_workers: ${scratch.num_train_workers}
     pin_memory: True

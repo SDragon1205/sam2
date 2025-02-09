@@ -207,15 +207,17 @@ class SAM2Train(SAM2Base):
         backbone_out["use_pt_input"] = use_pt_input
 
         # Sample initial conditioning frames
-        if num_init_cond_frames == 1:
-            init_cond_frames = [start_frame_idx]  # starting frame
-        else:
-            # starting frame + randomly selected remaining frames (without replacement)
-            init_cond_frames = [start_frame_idx] + self.rng.choice(
-                range(start_frame_idx + 1, num_frames),
-                num_init_cond_frames - 1,
-                replace=False,
-            ).tolist()
+        # if num_init_cond_frames == 1:
+        #     init_cond_frames = [start_frame_idx]  # starting frame
+        # else:
+        #     # starting frame + randomly selected remaining frames (without replacement)
+        #     init_cond_frames = [start_frame_idx] + self.rng.choice(
+        #         range(start_frame_idx + 1, num_frames),
+        #         num_init_cond_frames - 1,
+        #         replace=False,
+        #     ).tolist()
+        init_cond_frames = [start_frame_idx]
+
         backbone_out["init_cond_frames"] = init_cond_frames
         backbone_out["frames_not_in_init_cond"] = [
             t for t in range(start_frame_idx, num_frames) if t not in init_cond_frames
@@ -266,8 +268,10 @@ class SAM2Train(SAM2Base):
             )
         backbone_out["frames_to_add_correction_pt"] = frames_to_add_correction_pt
 
-        # print("============================================================================")
-        # print("prepare_prompt_inputs")
+        print("============================================================================")
+        print("prepare_prompt_inputs")
+        print("backbone_out[init_cond_frames]:", backbone_out["init_cond_frames"])
+        print("backbone_out[frames_not_in_init_cond]:", backbone_out["frames_not_in_init_cond"])
         # print("backbone_out:", backbone_out)
         # for key, value in backbone_out.items():
         #     if hasattr(value, 'shape'):  # PyTorch tensor or NumPy array
@@ -283,12 +287,12 @@ class SAM2Train(SAM2Base):
         #                 print(f"  {sub_key}: {sub_value.shape}")
         #     else:
         #         print(f"{key}: Type {type(value)}, cannot determine shape")
-        # print("backbone_out['vision_pos_enc'][0].shape", backbone_out['vision_pos_enc'][0].shape)
-        # print("backbone_out['vision_pos_enc'][1].shape", backbone_out['vision_pos_enc'][1].shape)
-        # print("backbone_out['vision_pos_enc'][2].shape", backbone_out['vision_pos_enc'][2].shape)
-        # print("backbone_out['backbone_fpn'][0].shape", backbone_out['backbone_fpn'][0].shape)
-        # print("backbone_out['backbone_fpn'][1].shape", backbone_out['backbone_fpn'][1].shape)
-        # print("backbone_out['backbone_fpn'][2].shape", backbone_out['backbone_fpn'][2].shape)
+        print("backbone_out['vision_pos_enc'][0].shape", backbone_out['vision_pos_enc'][0].shape)
+        print("backbone_out['vision_pos_enc'][1].shape", backbone_out['vision_pos_enc'][1].shape)
+        print("backbone_out['vision_pos_enc'][2].shape", backbone_out['vision_pos_enc'][2].shape)
+        print("backbone_out['backbone_fpn'][0].shape", backbone_out['backbone_fpn'][0].shape)
+        print("backbone_out['backbone_fpn'][1].shape", backbone_out['backbone_fpn'][1].shape)
+        print("backbone_out['backbone_fpn'][2].shape", backbone_out['backbone_fpn'][2].shape)
         
         # sys.exit()
 
@@ -299,9 +303,9 @@ class SAM2Train(SAM2Base):
     ):
         """Forward video tracking on each frame (and sample correction clicks)."""
         img_feats_already_computed = backbone_out["backbone_fpn"] is not None
-        # print("============================================================================")
-        # print("forward_tracking")
-        # print("img_feats_already_computed:", img_feats_already_computed)
+        print("============================================================================")
+        print("forward_tracking")
+        print("img_feats_already_computed:", img_feats_already_computed)
         if img_feats_already_computed:
             # Prepare the backbone features
             # - vision_feats and vision_pos_embeds are in (HW)BC format
@@ -340,7 +344,7 @@ class SAM2Train(SAM2Base):
             "non_cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
         }
 
-        # print("processing_order", processing_order)
+        print("processing_order", processing_order)
         # sys.exit()
         for stage_id in processing_order:
             # print("stage_id", stage_id)
@@ -348,14 +352,14 @@ class SAM2Train(SAM2Base):
             # img_ids = input.find_inputs[stage_id].img_ids
             img_ids = input.flat_obj_to_img_idx[stage_id]
 
-            # print("img_ids", img_ids)
+            print("img_ids", img_ids)
             if img_feats_already_computed:
                 # Retrieve image features according to img_ids (if they are already computed).
                 current_vision_feats = [x[:, img_ids] for x in vision_feats]
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
                 # HWxNxC to HWxIxC, I is len(img_ids)
-                # print("current_vision_feats", get_list_shape(current_vision_feats))
-                # print("current_vision_pos_embeds", get_list_shape(current_vision_pos_embeds))
+                print("current_vision_feats", get_list_shape(current_vision_feats))
+                print("current_vision_pos_embeds", get_list_shape(current_vision_pos_embeds))
             else:
                 # Otherwise, compute the image features on the fly for the given img_ids
                 # (this might be used for evaluation on long videos to avoid backbone OOM).
@@ -425,8 +429,8 @@ class SAM2Train(SAM2Base):
         frames_to_add_correction_pt=None,
         gt_masks=None,
     ):
-        # print("============================================================================")
-        # print("track_step")
+        print("============================================================================")
+        print("track_step")
         # print("frames_to_add_correction_pt", frames_to_add_correction_pt)
         if frames_to_add_correction_pt is None:
             frames_to_add_correction_pt = []
@@ -456,6 +460,7 @@ class SAM2Train(SAM2Base):
             object_score_logits,
         ) = sam_outputs
         # print("sam_outputs:", sam_outputs)
+        print("obj_ptr:", obj_ptr.shape)
         # sys.exit()
 
         current_out["multistep_pred_masks"] = low_res_masks
@@ -466,31 +471,31 @@ class SAM2Train(SAM2Base):
         current_out["multistep_point_inputs"] = [point_inputs]
         current_out["multistep_object_score_logits"] = [object_score_logits]
 
-        # Optionally, sample correction points iteratively to correct the mask
-        if frame_idx in frames_to_add_correction_pt:
-            point_inputs, final_sam_outputs = self._iter_correct_pt_sampling(
-                is_init_cond_frame,
-                point_inputs,
-                gt_masks,
-                high_res_features,
-                pix_feat,
-                low_res_multimasks,
-                high_res_multimasks,
-                ious,
-                low_res_masks,
-                high_res_masks,
-                object_score_logits,
-                current_out,
-            )
-            (
-                _,
-                _,
-                _,
-                low_res_masks,
-                high_res_masks,
-                obj_ptr,
-                object_score_logits,
-            ) = final_sam_outputs
+        # # Optionally, sample correction points iteratively to correct the mask
+        # if frame_idx in frames_to_add_correction_pt:
+        #     point_inputs, final_sam_outputs = self._iter_correct_pt_sampling(
+        #         is_init_cond_frame,
+        #         point_inputs,
+        #         gt_masks,
+        #         high_res_features,
+        #         pix_feat,
+        #         low_res_multimasks,
+        #         high_res_multimasks,
+        #         ious,
+        #         low_res_masks,
+        #         high_res_masks,
+        #         object_score_logits,
+        #         current_out,
+        #     )
+        #     (
+        #         _,
+        #         _,
+        #         _,
+        #         low_res_masks,
+        #         high_res_masks,
+        #         obj_ptr,
+        #         object_score_logits,
+        #     ) = final_sam_outputs
 
         # Use the final prediction (after all correction steps for output and eval)
         current_out["pred_masks"] = low_res_masks
@@ -499,9 +504,17 @@ class SAM2Train(SAM2Base):
 
         # Finally run the memory encoder on the predicted mask to encode
         # it into a new memory feature (that can be used in future frames)
-        # print("high_res_masks:", high_res_masks.shape)
+        print("============================================================================")
+        print("_encode_memory_in_output")
+        print("current_vision_feats:", type(current_vision_feats))
+        print("feat_sizes:", feat_sizes)
+        print("(point_inputs is not None):", (point_inputs is not None))
+        print("run_mem_encoder:", run_mem_encoder)
+        print("high_res_masks:", high_res_masks)
+        print("high_res_masks:", high_res_masks.shape)
         # # print(high_res_masks)
-        # print("object_score_logits:", object_score_logits.shape)
+        print("object_score_logits:", object_score_logits)
+        # sys.exit()
         self._encode_memory_in_output(
             current_vision_feats,
             feat_sizes,

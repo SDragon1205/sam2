@@ -16,7 +16,7 @@ import torch
 
 from PIL import Image as PILImage
 from tensordict import tensorclass
-
+import sys
 
 @tensorclass
 class BatchedVideoMetaData:
@@ -296,6 +296,10 @@ def collate_fn_yolo(
     img_batch = []
     for video in batch:
         img_batch += [torch.stack([frame.data for frame in video.frames], dim=0)]
+        # for frame in video.frames:
+        #     print("video.video_id:", video.video_id)
+        #     print("frame.data:", frame.data.shape)
+        # sys.exit()
 
     img_batch = torch.stack(img_batch, dim=0).permute((1, 0, 2, 3, 4))
     T = img_batch.shape[0]

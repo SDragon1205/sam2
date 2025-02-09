@@ -54,6 +54,104 @@ from training.utils.train_utils import (
 )
 
 import sys
+from PIL import Image, ImageDraw, ImageFont
+from typing import List, Tuple, Union
+from torchvision.transforms.functional import to_pil_image
+def preprocess_img(img: torch.Tensor):
+    """
+    Ensure image tensor is in the correct format for PIL conversion.
+    Args:
+        img: Tensor of shape [C, H, W], range [0, 1] or [0, 255].
+    Returns:
+        Correctly formatted tensor.
+    """
+    # If image is normalized, unnormalize it
+    if img.max() <= 1.0:  # Assuming normalization to [0, 1]
+        img = img * 255.0
+    img = img.byte()  # Convert to uint8
+    return img
+def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float, float]], 
+                       classes: List[Union[int, str]], scores: List[float], 
+                       frame_size: Tuple[int, int]):
+    """
+    Draw bounding boxes and class labels on the image.
+    """
+    # Convert tensor to PIL image
+    img = preprocess_img(img)
+    img_pil = to_pil_image(img)
+    draw = ImageDraw.Draw(img_pil)
+    font = ImageFont.load_default()  # Use a default bitmap font
+
+    # Unpack frame dimensions
+    width, height = frame_size
+
+    for bbox, cls, score in zip(bboxes, classes, scores):
+        # Decode normalized bbox to pixel coordinates
+        x_center, y_center, w, h = bbox
+        x_min = (x_center - w / 2) * width
+        y_min = (y_center - h / 2) * height
+        x_max = (x_center + w / 2) * width
+        y_max = (y_center + h / 2) * height
+
+        # Draw bounding box
+        draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=2)
+
+        # Draw class label and score
+        label = f"{cls} ({score:.2f})"
+        text_bbox = draw.textbbox((0, 0), label, font=font)  # Calculate text bounding box
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        text_position = (x_min, y_min - text_height if y_min > text_height else y_min + 5)
+        draw.text(text_position, label, fill="yellow", font=font)
+
+    return img_pil
+def visualize_batched_video(batched_video):
+    """
+    Process all videos and frames in the BatchedVideoDatapoint_yolo object.
+    """
+    img_batch = batched_video.img_batch  # [TxBxCxHxW]
+    metadata = batched_video.metadata
+    gtdata = batched_video.gtdata
+
+    # Extract batch dimensions
+    T, B, C, H, W = img_batch.shape
+    frame_size = (W, H)
+
+    all_frames_with_bboxes = []
+
+    for b in range(B):  # Loop over videos
+        print(f"Processing video {b}")
+        for t in range(T):  # Loop over frames
+            print(f"  Processing frame {t} of video {b}")
+
+            # Extract frame image
+            frame_img = img_batch[t, b]
+
+            # Find objects belonging to this frame
+            # obj_indices = (gtdata.obj_to_frame_idx[:, 0] == t) & (gtdata.obj_to_frame_idx[:, 1] == b)
+            # frame_bboxes = gtdata.bboxes[obj_indices].tolist()
+            # frame_classes = gtdata.classes[obj_indices].tolist()
+            # frame_scores = gtdata.scores[obj_indices].tolist()
+
+            batch_idx = b * T + t
+            obj_indices = gtdata["batch_idx"] == batch_idx
+            frame_bboxes = gtdata["bboxes"][obj_indices].tolist()
+            frame_classes = gtdata["cls"][obj_indices].tolist()
+            frame_scores = [1.0] * len(frame_classes)
+
+            # Draw bboxes on frame
+            frame_with_bboxes = draw_bbox_on_frame(
+                frame_img, frame_bboxes, frame_classes, frame_scores, frame_size
+            )
+
+            # Save frame to current directory
+            output_path = f"tmp/frame_{b}_{t}.png"
+            frame_with_bboxes.save(output_path)
+
+            # Store result
+            all_frames_with_bboxes.append((b, t, frame_with_bboxes))
+
+    return all_frames_with_bboxes
 
 CORE_LOSS_KEY_YOLO = "core_loss"
 
@@ -525,16 +623,17 @@ class Trainer_yolo:
         # print("2outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
 
         nms_outputs = self.validator.postprocess(outputs)
-        # for i_preds in range(len(nms_outputs)):
-        #     print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
-        #     print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
-        #     print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
+        for i_preds in range(len(nms_outputs)):
+            print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
+            print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
+            # print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
+        
         self.validator.update_metrics(nms_outputs, targets)
         # stats = self.validator.get_stats()
         # self.validator.check_stats(stats)
         # self.validator.finalize_metrics()
         # self.validator.print_results()
-        # sys.exit()
+        sys.exit()
         
         return ret_tuple
 
@@ -803,6 +902,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(train_loader):
+            # visualize_batched_video(batch)
             # measure data loading time
             data_time_meter.update(time.time() - end)
             data_times.append(data_time_meter.val)
