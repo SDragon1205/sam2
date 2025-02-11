@@ -2,9 +2,9 @@
 
 scratch:
   resolution: 1024
-  train_batch_size: 1
+  # train_batch_size: 1
   num_train_workers: 10
-  num_frames: 5
+  num_frames: 4
   max_num_objects: 3
   base_lr: 5.0e-3
   vision_lr: 3.0e-06
@@ -37,18 +37,28 @@ sa1b_dataset_train:
   img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
   gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
+  train_batch_size: 4
 
 sa1b_dataset_val:
   # PATHS to Dataset
   img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
   gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
+  train_batch_size: 1
 
-sav_dataset:
+sav_dataset_train:
   # PATHS to Dataset
   img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-train/sequences/" # PATH to MOSE JPEGImages folder
   gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-train/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
+  train_batch_size: 1
+
+sav_dataset_val:
+  # PATHS to Dataset
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/annotations/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
 
 # Video transforms
 vos_train:
@@ -158,7 +168,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: train_only
+  mode: val #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -321,8 +331,8 @@ trainer:
       _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset 
       phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
       batch_sizes: # List of batch sizes corresponding to each dataset
-      # - ${scratch.train_batch_size} # Batch size of dataset 1
-      - ${scratch.train_batch_size} # Batch size of dataset 2
+      # - ${sa1b_dataset_train.train_batch_size} # Batch size of dataset 1
+      - ${sav_dataset_train.train_batch_size} # Batch size of dataset 2
       datasets:
       # # SA1B as an example of an image dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
@@ -342,8 +352,8 @@ trainer:
         training: true
         video_dataset:
           _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset.img_folder}
-          gt_folder: ${sav_dataset.gt_folder}
+          img_folder: ${sav_dataset_train.img_folder}
+          gt_folder: ${sav_dataset_train.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
           # ann_every: 4
         sampler:
@@ -351,7 +361,7 @@ trainer:
           num_frames: ${scratch.num_frames} # Number of frames per video
           reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
         transforms: ${vos_train.train_transforms}
-        multiplier: ${sav_dataset.multiplier}
+        multiplier: ${sav_dataset_train.multiplier}
       shuffle: True
       num_workers: ${scratch.num_train_workers}
       pin_memory: True
@@ -361,41 +371,41 @@ trainer:
         _partial_: true
         dict_key: all
 
-    val: #train:
+    val:
       _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset 
       phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
       batch_sizes: # List of batch sizes corresponding to each dataset
-      # - ${scratch.train_batch_size} # Batch size of dataset 1
-      - ${scratch.train_batch_size} # Batch size of dataset 2
+      - 1 # Batch size of dataset 1
+      # - ${scratch.train_batch_size} # Batch size of dataset 2
       datasets:
-      # SA1B as an example of an image dataset
-      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-        training: true
-        video_dataset:
-          _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-          img_folder: ${sa1b_dataset_val.img_folder}
-          gt_folder: ${sa1b_dataset_val.gt_folder}
-          # file_list_txt: ${path_to_train_filelist} # Optional
-        sampler:
-          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-          num_frames: 1
-        transforms: ${vos_val.train_transforms}
-        multiplier: ${sa1b_dataset_val.multiplier}
-      # # SA-V as an example of a video dataset
+      # # SA1B as an example of an image dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
       #   training: true
       #   video_dataset:
-      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-      #     img_folder: ${sav_dataset.img_folder}
-      #     gt_folder: ${sav_dataset.gt_folder}
+      #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+      #     img_folder: ${sa1b_dataset_val.img_folder}
+      #     gt_folder: ${sa1b_dataset_val.gt_folder}
       #     # file_list_txt: ${path_to_train_filelist} # Optional
-      #     # ann_every: 4
       #   sampler:
       #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-      #     num_frames: ${scratch.num_frames} # Number of frames per video
-      #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+      #     num_frames: 1
       #   transforms: ${vos_val.train_transforms}
-      #   multiplier: ${sav_dataset.multiplier}
+      #   multiplier: ${sa1b_dataset_val.multiplier}
+      # SA-V as an example of a video dataset
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+          img_folder: ${sav_dataset_val.img_folder}
+          gt_folder: ${sav_dataset_val.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.num_frames} # Number of frames per video
+          reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+        transforms: ${vos_val.train_transforms}
+        multiplier: ${sav_dataset_val.multiplier}
       shuffle: False
       num_workers: ${scratch.num_train_workers}
       pin_memory: True

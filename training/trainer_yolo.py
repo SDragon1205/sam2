@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional
 import numpy as np
 
 import torch
+torch.autograd.set_detect_anomaly(True)
 import torch.distributed as dist
 import torch.nn as nn
 from hydra.utils import instantiate
@@ -623,17 +624,17 @@ class Trainer_yolo:
         # print("2outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
 
         nms_outputs = self.validator.postprocess(outputs)
-        for i_preds in range(len(nms_outputs)):
-            print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
-            print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
-            # print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
+        # for i_preds in range(len(nms_outputs)):
+        #     print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
+        #     print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
+        #     # print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
         
         self.validator.update_metrics(nms_outputs, targets)
         # stats = self.validator.get_stats()
         # self.validator.check_stats(stats)
         # self.validator.finalize_metrics()
         # self.validator.print_results()
-        sys.exit()
+        # sys.exit()
         
         return ret_tuple
 
@@ -764,7 +765,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(val_loader):
-
+            visualize_batched_video(batch)
             # measure data loading time
             data_time.update(time.time() - end)
 
@@ -902,7 +903,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(train_loader):
-            # visualize_batched_video(batch)
+            visualize_batched_video(batch)
             # measure data loading time
             data_time_meter.update(time.time() - end)
             data_times.append(data_time_meter.val)
@@ -1030,6 +1031,7 @@ class Trainer_yolo:
         # gradients
         self.optim.zero_grad(set_to_none=True)
         with torch.cuda.amp.autocast(
+        # with torch.amp.autocast(
             enabled=self.optim_conf.amp.enabled,
             dtype=get_amp_type(self.optim_conf.amp.amp_dtype),
         ):

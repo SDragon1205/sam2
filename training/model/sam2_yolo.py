@@ -225,7 +225,11 @@ class SAM2Train_yolo(SAM2Base_yolo):
         #         num_init_cond_frames - 1,
         #         replace=False,
         #     ).tolist()
+
         init_cond_frames = [start_frame_idx]
+        # init_cond_frames = [
+        #     t for t in range(start_frame_idx, num_frames)
+        # ]
         backbone_out["init_cond_frames"] = init_cond_frames
         backbone_out["frames_not_in_init_cond"] = [
             t for t in range(start_frame_idx, num_frames) if t not in init_cond_frames
@@ -365,6 +369,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
 
             # Get output masks based on this frame's prompts and previous memory
             yolo_outputs, current_out = self.track_step(
+            # yolo_outputs = self.track_step(
                 frame_idx=stage_id,
                 is_init_cond_frame=stage_id in init_cond_frames,
                 current_vision_feats=current_vision_feats,
@@ -506,6 +511,17 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # # Finally run the memory encoder on the predicted mask to encode
         # # it into a new memory feature (that can be used in future frames)
         
+        # 複製一份原始的 yolo_outputs
+        yolo_outputs_clone = (
+            yolo_outputs[0].clone(),  # 複製第一個張量
+            [
+                yolo_outputs[1][0].clone(),  # 複製第二個元組中的第一個張量
+                yolo_outputs[1][1].clone(),  # 複製第二個元組中的第二個張量
+                yolo_outputs[1][2].clone()   # 複製第二個元組中的第三個張量
+            ]
+        )
+
+        # 呼叫函數
         current_out = self._encode_memory_in_output(
             current_vision_feats,
             feat_sizes,
@@ -514,8 +530,22 @@ class SAM2Train_yolo(SAM2Base_yolo):
             # high_res_masks,
             # object_score_logits,
             # current_out,
-            yolo_outputs
+            yolo_outputs_clone
         )
+
+        # # 比較 yolo_outputs[0]
+        # if not torch.equal(yolo_outputs_clone[0], yolo_outputs[0]):
+        #     print("yolo_outputs[0] has been modified.")
+        # else:
+        #     print("yolo_outputs[0] remains unchanged.")
+
+        # # 比較 yolo_outputs[1] 中的張量
+        # for idx in range(3):
+        #     if not torch.equal(yolo_outputs_clone[1][idx], yolo_outputs[1][idx]):
+        #         print(f"yolo_outputs[1][{idx}] has been modified.")
+        #     else:
+        #         print(f"yolo_outputs[1][{idx}] remains unchanged.")
+        # sys.exit()
         return yolo_outputs, current_out
 
     # def _iter_correct_pt_sampling(

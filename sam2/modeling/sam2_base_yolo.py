@@ -790,7 +790,9 @@ class SAM2Base_yolo(torch.nn.Module):
         #     ) * self.no_obj_embed_spatial[..., None, None].expand(
         #         *maskmem_features.shape
         #     )
-
+        # print("maskmem_features:", maskmem_features)
+        # print("maskmem_pos_enc:", maskmem_pos_enc)
+        # sys.exit()
         return maskmem_features, maskmem_pos_enc
 
     def _track_step(
@@ -869,7 +871,7 @@ class SAM2Base_yolo(torch.nn.Module):
         return yolo_outputs, high_res_features, pix_feat
 
     
-    def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.25, iou=0.7, agnostic_nms=False, max_det=300):
+    def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.001, iou=0.7, agnostic_nms=False, max_det=300): #conf=0.25
         # print("old_preds:", preds[0].shape, preds[1][0].shape, preds[1][1].shape, preds[1][2].shape)
         preds = ops.non_max_suppression(
             preds,
@@ -892,7 +894,7 @@ class SAM2Base_yolo(torch.nn.Module):
         #     print(f"new_preds[{i_preds}]:", preds[i_preds])
         #     print(f"new_preds[{i_preds}]:", preds[i_preds].shape)
 
-        high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)
+        high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)#.clone()
 
         for idx, pred in enumerate(preds):
             for box in pred:
@@ -903,11 +905,20 @@ class SAM2Base_yolo(torch.nn.Module):
                 # 轉換座標為整數並限制在圖像範圍內
                 x1, y1, x2, y2 = map(lambda v: int(torch.clamp(v, 0, self.image_size - 1).item()), (x1, y1, x2, y2))
 
-                # 取出對應的類別通道，並填入 confidence，保留最大值
-                high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.maximum(
-                    high_res_masks[idx, cls, y1:y2+1, x1:x2+1], 
-                    conf
-                )
+                # # 取出對應的類別通道，並填入 confidence，保留最大值
+                # with torch.no_grad():
+                #     high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.maximum(
+                #         high_res_masks[idx, cls, y1:y2+1, x1:x2+1], 
+                #         conf
+                #     )
+                # 避免原地操作：使用clone創建新的張量版本
+                current_mask = high_res_masks[idx, cls, y1:y2+1, x1:x2+1].clone()
+                
+                # 保留梯度並避免原地修改
+                high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.maximum(current_mask, conf.clone())
+
+                # current_mask = high_res_masks[idx, cls, y1:y2+1, x1:x2+1]
+                # high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.max(current_mask, conf)
         def visualize_output_tensor(output_tensor, batch_idx=0):
             """
             可視化特定 batch 的 output_tensor。
@@ -931,7 +942,8 @@ class SAM2Base_yolo(torch.nn.Module):
             sys.exit()
         # visualize_output_tensor(high_res_masks, 0)
         # visualize_output_tensor(high_res_masks, 1)
-
+        # print("high_res_masks:", high_res_masks)
+        # sys.exit()
         return high_res_masks
     
     def _encode_memory_in_output(
