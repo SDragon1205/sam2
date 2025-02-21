@@ -181,5 +181,7 @@ class MemoryEncoder(nn.Module):
         x = self.out_proj(x)
 
         pos = self.position_encoding(x).to(x.dtype)
-
+        # print("x:", x.shape)
+        # print("pos:", pos.shape)
+        # sys.exit()
         return {"vision_features": x, "vision_pos_enc": [pos]}

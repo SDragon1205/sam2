@@ -1,1 +1,5 @@
 python training/train.py     -c configs/sam2.1_training/yolo_sam2.1_hiera_b+_MOSE_finetune.yaml     --use-cluster 0     --num-gpus 1
+
+
+
+python training/train.py     -c configs/sam2.1_training/yolom_s.yaml     --use-cluster 0     --num-gpus 1

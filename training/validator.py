@@ -72,7 +72,7 @@ class maP50_Validator:
         cls = batch["cls"][idx].squeeze(-1)
         bbox = batch["bboxes"][idx]
         ori_shape = batch["ori_shape"][si]
-        imgsz = (1024, 1024)
+        imgsz = (self.imgsz, self.imgsz)
         # ratio_pad = batch["ratio_pad"][si]
         # print("ori_shape:", ori_shape, type(ori_shape))
         # print("imgsz:", imgsz)#, imgsz.shape)

@@ -1,7 +1,7 @@
 # @package _global_
 
 scratch:
-  resolution: 1024
+  resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
   num_frames: 4
@@ -12,8 +12,8 @@ scratch:
   num_epochs: 80
   reverse_time_prob: 0.5
   nc: 10
-  ch: [256, 64, 32]
-  stride: [16., 8., 4.]  # 1024/64, 1024/128, 1024/256
+  ch: [128, 256, 512]
+  stride: [ 8., 16., 32.]  # 640/80, 640/40, 640/20
   names:
     0: "pedestrian"
     1: "people"
@@ -92,9 +92,9 @@ vos_train:
           saturation: 0.05
           hue: null
         - _target_: training.dataset.transforms.ToTensorAPI_yolo
-        - _target_: training.dataset.transforms.NormalizeAPI_yolo
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
+        # - _target_: training.dataset.transforms.NormalizeAPI_yolo
+        #   mean: [0.485, 0.456, 0.406]
+        #   std: [0.229, 0.224, 0.225]
 
 vos_val:
   train_transforms:
@@ -168,37 +168,48 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: val #val # train_only
+  mode: train_only #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
 
   model:
-    _target_: training.model.sam2_yolo.SAM2Train_yolo
-    image_encoder:
-      _target_: sam2.modeling.backbones.image_encoder.ImageEncoder
-      scalp: 1
-      trunk:
-        _target_: sam2.modeling.backbones.hieradet.Hiera
-        embed_dim: 112
-        num_heads: 2
-        drop_path_rate: 0.1
-      neck:
-        _target_: sam2.modeling.backbones.image_encoder.FpnNeck
-        position_encoding:
-          _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-          num_pos_feats: 256
-          normalize: true
-          scale: null
-          temperature: 10000
-        d_model: 256
-        backbone_channel_list: [896, 448, 224, 112]
-        fpn_top_down_levels: [2, 3]  # output level 0 and 1 directly use the backbone features
-        fpn_interp_model: nearest
+    _target_: training.model.yolom.YOLOMTrain
+    # image_encoder:
+    #   _target_: sam2.modeling.backbones.image_encoder.ImageEncoder
+    #   scalp: 1
+    #   trunk:
+    #     _target_: sam2.modeling.backbones.hieradet.Hiera
+    #     embed_dim: 112
+    #     num_heads: 2
+    #     drop_path_rate: 0.1
+    #   neck:
+    #     _target_: sam2.modeling.backbones.image_encoder.FpnNeck
+    #     position_encoding:
+    #       _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+    #       num_pos_feats: 256
+    #       normalize: true
+    #       scale: null
+    #       temperature: 10000
+    #     d_model: 256
+    #     backbone_channel_list: [896, 448, 224, 112]
+    #     fpn_top_down_levels: [2, 3]  # output level 0 and 1 directly use the backbone features
+    #     fpn_interp_model: nearest
+    yolo:
+      _target_: sam2.modeling.backbones.yolo.yolo
+      # model: /home/si2/sdragon/sam2/checkpoints/yolov8s.pt
+      cfg: yolov8s.yaml
+      nc: ${scratch.nc}
+      position_encoding:
+        _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
+        num_pos_feats: 512
+        normalize: true
+        scale: null
+        temperature: 10000
 
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
-      d_model: 256
+      d_model: 512
       pos_enc_at_input: true
       layer:
         _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
@@ -209,20 +220,20 @@ trainer:
         self_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [64, 64]
-          embedding_dim: 256
+          feat_sizes: [20, 20]
+          embedding_dim: 512
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-        d_model: 256
+        d_model: 512
         pos_enc_at_cross_attn_keys: true
         pos_enc_at_cross_attn_queries: false
         cross_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [64, 64]
+          feat_sizes: [20, 20]
           rope_k_repeat: True
-          embedding_dim: 256
+          embedding_dim: 512
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
@@ -240,20 +251,23 @@ trainer:
           temperature: 10000
         mask_downsampler:
           _target_: sam2.modeling.memory_encoder.MaskDownSampler
+          embed_dim: 512
           kernel_size: 3
           stride: 2
           padding: 1
+          total_stride: 32
           in_chans: ${scratch.nc}
         fuser:
           _target_: sam2.modeling.memory_encoder.Fuser
           layer:
             _target_: sam2.modeling.memory_encoder.CXBlock
-            dim: 256
+            dim: 512
             kernel_size: 7
             padding: 3
             layer_scale_init_value: 1e-6
             use_dwconv: True  # depth-wise convs
           num_layers: 2
+        in_dim: 512
 
     num_maskmem: 7
     image_size: ${scratch.resolution}
@@ -263,7 +277,7 @@ trainer:
     use_mask_input_as_output_without_sam: false # true
     # Memory
     directly_add_no_mem_embed: true
-    no_obj_embed_spatial: true
+    # no_obj_embed_spatial: true
     # use high-resolution feature map in the SAM mask decoder
     use_high_res_features_in_sam: true
     # output 3 masks on the first click on initial conditioning frames
@@ -271,7 +285,7 @@ trainer:
     # SAM heads
     iou_prediction_use_sigmoid: True
     # cross-attend to object pointers from other frames (based on SAM output tokens) in the encoder
-    use_obj_ptrs_in_encoder: true
+    # use_obj_ptrs_in_encoder: true
     add_tpos_enc_to_obj_ptrs: true
     proj_tpos_enc_in_obj_ptrs: true
     use_signed_tpos_enc_to_obj_ptrs: true
@@ -311,9 +325,10 @@ trainer:
     num_init_cond_frames_for_eval: 1  # only mask on the first frame
     forward_backbone_per_frame_for_eval: True
 
-    detect_nc: ${scratch.nc}
-    detect_ch: ${scratch.ch}
-    detect_stride: ${scratch.stride}
+    hidden_dim: 512
+    # detect_nc: ${scratch.nc}
+    # detect_ch: ${scratch.ch}
+    # detect_stride: ${scratch.stride}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -378,34 +393,34 @@ trainer:
       - 1 # Batch size of dataset 1
       # - ${scratch.train_batch_size} # Batch size of dataset 2
       datasets:
-      # # SA1B as an example of an image dataset
-      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: true
-      #   video_dataset:
-      #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-      #     img_folder: ${sa1b_dataset_val.img_folder}
-      #     gt_folder: ${sa1b_dataset_val.gt_folder}
-      #     # file_list_txt: ${path_to_train_filelist} # Optional
-      #   sampler:
-      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-      #     num_frames: 1
-      #   transforms: ${vos_val.train_transforms}
-      #   multiplier: ${sa1b_dataset_val.multiplier}
-      # SA-V as an example of a video dataset
+      # SA1B as an example of an image dataset
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: true
         video_dataset:
-          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_val.img_folder}
-          gt_folder: ${sav_dataset_val.gt_folder}
+          _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+          img_folder: ${sa1b_dataset_val.img_folder}
+          gt_folder: ${sa1b_dataset_val.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
-          # ann_every: 4
         sampler:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-          num_frames: ${scratch.num_frames} # Number of frames per video
-          reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+          num_frames: 1
         transforms: ${vos_val.train_transforms}
-        multiplier: ${sav_dataset_val.multiplier}
+        multiplier: ${sa1b_dataset_val.multiplier}
+      # # SA-V as an example of a video dataset
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: true
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset_val.img_folder}
+      #     gt_folder: ${sav_dataset_val.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.num_frames} # Number of frames per video
+      #     reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+      #   transforms: ${vos_val.train_transforms}
+      #   multiplier: ${sav_dataset_val.multiplier}
       shuffle: False
       num_workers: ${scratch.num_train_workers}
       pin_memory: True
@@ -433,14 +448,14 @@ trainer:
       max_norm: 0.1
       norm_type: 2
 
-    param_group_modifiers:
-      - _target_: training.optimizer.layer_decay_param_modifier
-        _partial_: True
-        layer_decay_value: 0.9
-        apply_to: 'image_encoder.trunk'
-        overrides:
-          - pattern: '*pos_embed*'
-            value: 1.0
+    # param_group_modifiers:
+    #   - _target_: training.optimizer.layer_decay_param_modifier
+    #     _partial_: True
+    #     layer_decay_value: 0.9
+    #     apply_to: 'image_encoder.trunk'
+    #     overrides:
+    #       - pattern: '*pos_embed*'
+    #         value: 1.0
 
     options:
       lr:
@@ -448,12 +463,12 @@ trainer:
             _target_: fvcore.common.param_scheduler.CosineParamScheduler
             start_value: ${scratch.base_lr}
             end_value: ${divide:${scratch.base_lr},10}
-        - scheduler:
-            _target_: fvcore.common.param_scheduler.CosineParamScheduler
-            start_value: ${scratch.vision_lr}
-            end_value: ${divide:${scratch.vision_lr},10}
-          param_names:
-            - 'image_encoder.*'
+        # - scheduler:
+        #     _target_: fvcore.common.param_scheduler.CosineParamScheduler
+        #     start_value: ${scratch.vision_lr}
+        #     end_value: ${divide:${scratch.vision_lr},10}
+        #   param_names:
+        #     - 'image_encoder.*'
       weight_decay:
         - scheduler:
             _target_: fvcore.common.param_scheduler.ConstantParamScheduler
@@ -510,7 +525,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolo_sam2.1_hiera_base_plus.pt # PATH to SAM 2.1 checkpoint
+        checkpoint_path: ./checkpoints/yolov8s_m.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

@@ -9,7 +9,7 @@ import logging
 import numpy as np
 import torch
 import torch.distributed
-from sam2.modeling.sam2_base_yolo import SAM2Base_yolo
+from sam2.modeling.yolom_base import YOLOMBase
 from sam2.modeling.sam2_utils import (
     get_1d_sine_pe,
     get_next_point,
@@ -21,11 +21,13 @@ from sam2.utils.misc import concat_points
 
 from training.utils.data_utils import BatchedVideoDatapoint_yolo
 import sys
+from PIL import Image
+from ultralytics import YOLO
 
-class SAM2Train_yolo(SAM2Base_yolo):
+class YOLOMTrain(YOLOMBase):
     def __init__(
         self,
-        image_encoder,
+        yolo,
         memory_attention=None,
         memory_encoder=None,
         prob_to_use_pt_input_for_train=0.0,
@@ -71,7 +73,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # detect_stride = [16., 8., 4.],
         **kwargs,
     ):
-        super().__init__(image_encoder, memory_attention, memory_encoder, **kwargs)
+        super().__init__(yolo, memory_attention, memory_encoder, **kwargs)
         self.use_act_ckpt_iterative_pt_sampling = use_act_ckpt_iterative_pt_sampling
         self.forward_backbone_per_frame_for_eval = forward_backbone_per_frame_for_eval
 
@@ -103,9 +105,9 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # A random number generator with a fixed initial seed across GPUs
         self.rng = np.random.default_rng(seed=42)
 
-        if freeze_image_encoder:
-            for p in self.image_encoder.parameters():
-                p.requires_grad = False
+        # if freeze_image_encoder:
+        #     for p in self.image_encoder.parameters():
+        #         p.requires_grad = False
 
     def forward(self, input: BatchedVideoDatapoint_yolo):
         # if self.training or not self.forward_backbone_per_frame_for_eval:
@@ -116,10 +118,31 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # else:
         #     # defer image feature computation on a frame until it's being tracked
         #     backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
+
         backbone_out = self.forward_image(input.flat_img_batch)
         backbone_out = self.prepare_prompt_inputs(backbone_out, input)
         previous_stages_out = self.forward_tracking(backbone_out, input)
+        # previous_stages_out = self._forward_yolo_neck_heads(backbone_out["backbone_fpn"])
+        # previous_stages_out = self.yolo.detection_model._predict_once(input.flat_img_batch)
 
+        # model = YOLO("/home/si2/sdragon/sam2/checkpoints/yolov8s.pt")
+        # img_tensor = input.flat_img_batch
+        # img_tensor = img_tensor.to(torch.float32)
+        # previous_stages_out = model.model._predict_once(img_tensor)
+
+        # results = model(input.flat_img_batch)
+
+        # for i, r in enumerate(results):
+        #     # Plot results image
+        #     im_bgr = r.plot()  # BGR-order numpy array
+        #     im_rgb = Image.fromarray(im_bgr[..., ::-1])  # RGB-order PIL image
+
+        #     # Show results to screen (in supported environments)
+        #     r.show()
+
+        #     # Save results to disk
+        #     r.save(filename=f"tmp/results{i}.jpg")
+        # sys.exit()
         return previous_stages_out
 
     def _prepare_backbone_features_per_frame(self, img_batch, img_ids):
@@ -167,9 +190,9 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # # gt_masks_per_frame = input.masks.unsqueeze(2) # [T,B,1,H_im,W_im] keep everything in tensor form
         # backbone_out["gt_masks_per_frame"] = gt_masks_per_frame
         # print("input:", input)
-        backbone_out["batch_idx"] = input.gtdata['batch_idx']
-        backbone_out["classes"] = input.gtdata['cls']
-        backbone_out["bboxes"] = input.gtdata['bboxes']
+        # backbone_out["batch_idx"] = input.gtdata['batch_idx']
+        # backbone_out["classes"] = input.gtdata['cls']
+        # backbone_out["bboxes"] = input.gtdata['bboxes']
         # backbone_out["scores"] = input.gtdata.scores
         num_frames = input.num_frames
         backbone_out["num_frames"] = num_frames
@@ -304,8 +327,6 @@ class SAM2Train_yolo(SAM2Base_yolo):
     ):
         """Forward video tracking on each frame (and sample correction clicks)."""
         img_feats_already_computed = backbone_out["backbone_fpn"] is not None
-        # print("img_feats_already_computed:", img_feats_already_computed)
-
         if img_feats_already_computed:
             # Prepare the backbone features
             # - vision_feats and vision_pos_embeds are in (HW)BC format
@@ -315,7 +336,7 @@ class SAM2Train_yolo(SAM2Base_yolo):
                 vision_pos_embeds,
                 feat_sizes,
             ) = self._prepare_backbone_features(backbone_out)
-        # sys.exit()
+
         # Starting the stage loop
         num_frames = backbone_out["num_frames"]
         init_cond_frames = backbone_out["init_cond_frames"]
@@ -336,11 +357,11 @@ class SAM2Train_yolo(SAM2Base_yolo):
         # 14 = 10(nc) + 4(xywh)
         # 74 = 10(nc) + 16(reg_max) * 4 = 10 + 64
         all_frame_outputs = (
-            torch.zeros(batch_size, 14, 86016, device=self.device),
+            torch.zeros(batch_size, 14, 8400, device=self.device),
             [
-                torch.zeros(batch_size, 74, hw_size2, hw_size2, device=self.device),
+                torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device),
                 torch.zeros(batch_size, 74, hw_size1, hw_size1, device=self.device),
-                torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device)
+                torch.zeros(batch_size, 74, hw_size2, hw_size2, device=self.device)
             ]
         )
         # all_frame_outputs = [

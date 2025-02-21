@@ -12,6 +12,7 @@ from torch.nn.init import trunc_normal_
 
 from sam2.modeling.sam.mask_decoder import MaskDecoder
 from sam2.modeling.sam.detection_head import Detection_head
+from sam2.modeling.backbones.yolo import yolo
 from sam2.modeling.sam.prompt_encoder import PromptEncoder
 from sam2.modeling.sam.transformer import TwoWayTransformer
 from sam2.modeling.sam2_utils import get_1d_sine_pe, MLP, select_closest_cond_frames
@@ -22,10 +23,10 @@ import sys
 NO_OBJ_SCORE = -1024.0
 
 
-class SAM2Base_yolo(torch.nn.Module):
+class YOLOMBase(torch.nn.Module):
     def __init__(
         self,
-        image_encoder,
+        yolo,
         memory_attention,
         memory_encoder,
         num_maskmem=7,  # default 1 input frame + 6 previous frames
@@ -65,7 +66,7 @@ class SAM2Base_yolo(torch.nn.Module):
         # whether to apply non-overlapping constraints on the object masks in the memory encoder during evaluation (to avoid/alleviate superposing masks)
         non_overlap_masks_for_mem_enc=False,
         # whether to cross-attend to object pointers from other frames (based on SAM output tokens) in the encoder
-        use_obj_ptrs_in_encoder=False,
+        # use_obj_ptrs_in_encoder=False,
         # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_obj_ptrs_in_encoder=True`)
         max_obj_ptrs_in_encoder=16,
         # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_obj_ptrs_in_encoder=True`)
@@ -92,28 +93,29 @@ class SAM2Base_yolo(torch.nn.Module):
         soft_no_obj_ptr: bool = False,
         use_mlp_for_obj_ptr_proj: bool = False,
         # add no obj embedding to spatial frames
-        no_obj_embed_spatial: bool = False,
+        # no_obj_embed_spatial: bool = False,
         # extra arguments used to construct the SAM mask decoder; if not None, it should be a dict of kwargs to be passed into `MaskDecoder` class.
         sam_mask_decoder_extra_args=None,
         compile_image_encoder: bool = False,
         detect_nc = 10,
-        detect_ch = [256, 64, 32],
-        detect_stride = [16., 8., 4.],
+        detect_ch = [128, 256, 512],
+        detect_stride = [ 8., 16., 32.],
+        hidden_dim=512,
     ):
         super().__init__()
 
         # Part 1: the image backbone
-        self.image_encoder = image_encoder
+        self.yolo = yolo
         # Use level 0, 1, 2 for high-res setting, or just level 2 for the default setting
         self.use_high_res_features_in_sam = use_high_res_features_in_sam
         self.num_feature_levels = 3 if use_high_res_features_in_sam else 1
-        self.use_obj_ptrs_in_encoder = use_obj_ptrs_in_encoder
+        # self.use_obj_ptrs_in_encoder = use_obj_ptrs_in_encoder
         self.max_obj_ptrs_in_encoder = max_obj_ptrs_in_encoder
-        if use_obj_ptrs_in_encoder:
-            # A conv layer to downsample the mask prompt to stride 4 (the same stride as
-            # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
-            # so that it can be fed into the SAM mask decoder to generate a pointer.
-            self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
+        # if use_obj_ptrs_in_encoder:
+        #     # A conv layer to downsample the mask prompt to stride 4 (the same stride as
+        #     # low-res SAM mask logits) and to change its scales from 0~1 to SAM logit scale,
+        #     # so that it can be fed into the SAM mask decoder to generate a pointer.
+        #     self.mask_downsample = torch.nn.Conv2d(1, 1, kernel_size=4, stride=4)
         self.add_tpos_enc_to_obj_ptrs = add_tpos_enc_to_obj_ptrs
         if proj_tpos_enc_in_obj_ptrs:
             assert add_tpos_enc_to_obj_ptrs  # these options need to be used together
@@ -124,9 +126,7 @@ class SAM2Base_yolo(torch.nn.Module):
         # Part 2: memory attention to condition current frame's visual features
         # with memories (and obj ptrs) from past frames
         self.memory_attention = memory_attention
-        # print("image_encoder.neck.d_model:", image_encoder.neck.d_model)
-        # sys.exit()
-        self.hidden_dim = image_encoder.neck.d_model
+        self.hidden_dim = hidden_dim
 
         # Part 3: memory encoder for the previous frame's outputs
         self.memory_encoder = memory_encoder
@@ -146,7 +146,9 @@ class SAM2Base_yolo(torch.nn.Module):
         self.no_mem_embed = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
         self.no_mem_pos_enc = torch.nn.Parameter(torch.zeros(1, 1, self.hidden_dim))
         trunc_normal_(self.no_mem_embed, std=0.02)
+        # print("self.no_mem_embed:", self.no_mem_embed.shape, self.no_mem_embed)
         trunc_normal_(self.no_mem_pos_enc, std=0.02)
+        # print("self.no_mem_pos_enc:", self.no_mem_pos_enc.shape, self.no_mem_pos_enc)
         self.directly_add_no_mem_embed = directly_add_no_mem_embed
         # Apply sigmoid to the output raw mask logits (to turn them from
         # range (-inf, +inf) to range (0, 1)) before feeding them into the memory encoder
@@ -176,34 +178,34 @@ class SAM2Base_yolo(torch.nn.Module):
         self.soft_no_obj_ptr = soft_no_obj_ptr
         if self.fixed_no_obj_ptr:
             assert self.pred_obj_scores
-            assert self.use_obj_ptrs_in_encoder
-        if self.pred_obj_scores and self.use_obj_ptrs_in_encoder:
-            self.no_obj_ptr = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
-            trunc_normal_(self.no_obj_ptr, std=0.02)
+            # assert self.use_obj_ptrs_in_encoder
+        # if self.pred_obj_scores and self.use_obj_ptrs_in_encoder:
+        #     self.no_obj_ptr = torch.nn.Parameter(torch.zeros(1, self.hidden_dim))
+        #     trunc_normal_(self.no_obj_ptr, std=0.02)
         self.use_mlp_for_obj_ptr_proj = use_mlp_for_obj_ptr_proj
-        self.no_obj_embed_spatial = None
-        if no_obj_embed_spatial:
-            self.no_obj_embed_spatial = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
-            trunc_normal_(self.no_obj_embed_spatial, std=0.02)
+        # self.no_obj_embed_spatial = None
+        # if no_obj_embed_spatial:
+        #     self.no_obj_embed_spatial = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
+        #     trunc_normal_(self.no_obj_embed_spatial, std=0.02)
 
         self.detect_nc = detect_nc
         self.detect_ch = detect_ch
         self.detect_stride = detect_stride
-        self._build_yolo_heads()
+        # self._build_yolo()
         self.max_cond_frames_in_attn = max_cond_frames_in_attn
 
-        # Model compilation
-        if compile_image_encoder:
-            # Compile the forward function (not the full module) to allow loading checkpoints.
-            print(
-                "Image encoder compilation is enabled. First forward pass will be slow."
-            )
-            self.image_encoder.forward = torch.compile(
-                self.image_encoder.forward,
-                mode="max-autotune",
-                fullgraph=True,
-                dynamic=False,
-            )
+        # # Model compilation
+        # if compile_image_encoder:
+        #     # Compile the forward function (not the full module) to allow loading checkpoints.
+        #     print(
+        #         "Image encoder compilation is enabled. First forward pass will be slow."
+        #     )
+        #     self.image_encoder.forward = torch.compile(
+        #         self.image_encoder.forward,
+        #         mode="max-autotune",
+        #         fullgraph=True,
+        #         dynamic=False,
+        #     )
 
     @property
     def device(self):
@@ -215,63 +217,64 @@ class SAM2Base_yolo(torch.nn.Module):
             "See notebooks/video_predictor_example.ipynb for an inference example."
         )
 
-    def _build_yolo_heads(self):
-        """Build SAM-style prompt encoder and mask decoder."""
-        self.sam_prompt_embed_dim = self.hidden_dim
-        self.sam_image_embedding_size = self.image_size // self.backbone_stride
+    # def _build_yolo(self):
+    #     """Build SAM-style prompt encoder and mask decoder."""
+        # self.sam_prompt_embed_dim = self.hidden_dim
+        # self.sam_image_embedding_size = self.image_size // self.backbone_stride
 
-        # build PromptEncoder and MaskDecoder from SAM
-        # (their hyperparameters like `mask_in_chans=16` are from SAM code)
-        self.sam_prompt_encoder = PromptEncoder(
-            embed_dim=self.sam_prompt_embed_dim,
-            image_embedding_size=(
-                self.sam_image_embedding_size,
-                self.sam_image_embedding_size,
-            ),
-            input_image_size=(self.image_size, self.image_size),
-            mask_in_chans=16,
-        )
-        self.sam_mask_decoder = MaskDecoder(
-            num_multimask_outputs=3,
-            transformer=TwoWayTransformer(
-                depth=2,
-                embedding_dim=self.sam_prompt_embed_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            ),
-            transformer_dim=self.sam_prompt_embed_dim,
-            iou_head_depth=3,
-            iou_head_hidden_dim=256,
-            use_high_res_features=self.use_high_res_features_in_sam,
-            iou_prediction_use_sigmoid=self.iou_prediction_use_sigmoid,
-            pred_obj_scores=self.pred_obj_scores,
-            pred_obj_scores_mlp=self.pred_obj_scores_mlp,
-            use_multimask_token_for_obj_ptr=self.use_multimask_token_for_obj_ptr,
-            **(self.sam_mask_decoder_extra_args or {}),
-        )
+        # # build PromptEncoder and MaskDecoder from SAM
+        # # (their hyperparameters like `mask_in_chans=16` are from SAM code)
+        # self.sam_prompt_encoder = PromptEncoder(
+        #     embed_dim=self.sam_prompt_embed_dim,
+        #     image_embedding_size=(
+        #         self.sam_image_embedding_size,
+        #         self.sam_image_embedding_size,
+        #     ),
+        #     input_image_size=(self.image_size, self.image_size),
+        #     mask_in_chans=16,
+        # )
+        # self.sam_mask_decoder = MaskDecoder(
+        #     num_multimask_outputs=3,
+        #     transformer=TwoWayTransformer(
+        #         depth=2,
+        #         embedding_dim=self.sam_prompt_embed_dim,
+        #         mlp_dim=2048,
+        #         num_heads=8,
+        #     ),
+        #     transformer_dim=self.sam_prompt_embed_dim,
+        #     iou_head_depth=3,
+        #     iou_head_hidden_dim=256,
+        #     use_high_res_features=self.use_high_res_features_in_sam,
+        #     iou_prediction_use_sigmoid=self.iou_prediction_use_sigmoid,
+        #     pred_obj_scores=self.pred_obj_scores,
+        #     pred_obj_scores_mlp=self.pred_obj_scores_mlp,
+        #     use_multimask_token_for_obj_ptr=self.use_multimask_token_for_obj_ptr,
+        #     **(self.sam_mask_decoder_extra_args or {}),
+        # )
+        # self.yolo = yolo()
 
-        self.yolo_detection_head = Detection_head(
-            transformer_dim=self.sam_prompt_embed_dim,
-            nc=self.detect_nc,
-            ch=self.detect_ch,
-            stride=self.detect_stride,
-        )
+        # self.yolo_detection_head = Detection_head(
+        #     transformer_dim=self.sam_prompt_embed_dim,
+        #     nc=self.detect_nc,
+        #     ch=self.detect_ch,
+        #     stride=self.detect_stride,
+        # )
 
-        if self.use_obj_ptrs_in_encoder:
-            # a linear projection on SAM output tokens to turn them into object pointers
-            self.obj_ptr_proj = torch.nn.Linear(self.hidden_dim, self.hidden_dim)
-            if self.use_mlp_for_obj_ptr_proj:
-                self.obj_ptr_proj = MLP(
-                    self.hidden_dim, self.hidden_dim, self.hidden_dim, 3
-                )
-        else:
-            self.obj_ptr_proj = torch.nn.Identity()
-        if self.proj_tpos_enc_in_obj_ptrs:
-            # a linear projection on temporal positional encoding in object pointers to
-            # avoid potential interference with spatial positional encoding
-            self.obj_ptr_tpos_proj = torch.nn.Linear(self.hidden_dim, self.mem_dim)
-        else:
-            self.obj_ptr_tpos_proj = torch.nn.Identity()
+        # if self.use_obj_ptrs_in_encoder:
+        #     # a linear projection on SAM output tokens to turn them into object pointers
+        #     self.obj_ptr_proj = torch.nn.Linear(self.hidden_dim, self.hidden_dim)
+        #     if self.use_mlp_for_obj_ptr_proj:
+        #         self.obj_ptr_proj = MLP(
+        #             self.hidden_dim, self.hidden_dim, self.hidden_dim, 3
+        #         )
+        # else:
+        #     self.obj_ptr_proj = torch.nn.Identity()
+        # if self.proj_tpos_enc_in_obj_ptrs:
+        #     # a linear projection on temporal positional encoding in object pointers to
+        #     # avoid potential interference with spatial positional encoding
+        #     self.obj_ptr_tpos_proj = torch.nn.Linear(self.hidden_dim, self.mem_dim)
+        # else:
+        #     self.obj_ptr_tpos_proj = torch.nn.Identity()
 
     # def _forward_sam_heads(
     #     self,
@@ -430,10 +433,10 @@ class SAM2Base_yolo(torch.nn.Module):
     #         obj_ptr,
     #         object_score_logits,
     #     )
-    def _forward_yolo_heads(
+    def _forward_yolo_neck_heads(
         self,
         backbone_features,
-        high_res_features,
+        # high_res_features,
     ):
         """
         Forward SAM prompt encoders and mask heads.
@@ -448,97 +451,93 @@ class SAM2Base_yolo(torch.nn.Module):
         - preds: List[torch.Tensor]: 3*[(nc+reg_max*4)*H*W] batched undecoded bbox and class
           reg_max: 16
         """
-        B = backbone_features.size(0)
-        device = backbone_features.device
-        assert backbone_features.size(1) == self.sam_prompt_embed_dim
-        assert backbone_features.size(2) == self.sam_image_embedding_size
-        assert backbone_features.size(3) == self.sam_image_embedding_size
+        B = backbone_features[2].size(0)
+        device = backbone_features[2].device
+        # assert backbone_features[2].size(1) == self.sam_prompt_embed_dim
+        # assert backbone_features[2].size(2) == self.sam_image_embedding_size
+        # assert backbone_features[2].size(3) == self.sam_image_embedding_size
         
 
-        x_preds = self.yolo_detection_head(
-            image_embeddings=backbone_features,
-            high_res_features=high_res_features,
-        )
+        # x_preds = self.yolo_detection_head(
+        #     image_embeddings=backbone_features,
+        #     high_res_features=high_res_features,
+        # )
+        x_preds = self.yolo.forward_neck_head(backbone_features)
+        # print("x_preds[0]:", x_preds[0].shape)
+        # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
+        # sys.exit()
+        # print("ch:", self.yolo.detection_model.model[22].cv2)
+        # print("stride:", self.yolo.detection_model.model[22].stride)
         if not self.training:
             return x_preds
         # print("self.training:", self.training)
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
-        y_preds = self.yolo_detection_head.detect._inference(x_preds)
+        y_preds = self.yolo.detection_model.model[22]._inference(x_preds)
         # print("y_preds[0]:", y_preds[0].shape)
         # print("y_preds[1]:", y_preds[1][0].shape, y_preds[1][1].shape, y_preds[1][2].shape)
 
         return (y_preds, x_preds)
         # return x_preds
 
-    def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
-        """
-        Directly turn binary `mask_inputs` into a output mask logits without using SAM.
-        (same input and output shapes as in _forward_sam_heads above).
-        """
-        # Use -10/+10 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
-        out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
-        mask_inputs_float = mask_inputs.float()
-        high_res_masks = mask_inputs_float * out_scale + out_bias
-        low_res_masks = F.interpolate(
-            high_res_masks,
-            size=(high_res_masks.size(-2) // 4, high_res_masks.size(-1) // 4),
-            align_corners=False,
-            mode="bilinear",
-            antialias=True,  # use antialias for downsampling
-        )
-        # a dummy IoU prediction of all 1's under mask input
-        ious = mask_inputs.new_ones(mask_inputs.size(0), 1).float()
-        if not self.use_obj_ptrs_in_encoder:
-            # all zeros as a dummy object pointer (of shape [B, C])
-            obj_ptr = torch.zeros(
-                mask_inputs.size(0), self.hidden_dim, device=mask_inputs.device
-            )
-        else:
-            # produce an object pointer using the SAM decoder from the mask input
-            _, _, _, _, _, obj_ptr, _ = self._forward_sam_heads(
-                backbone_features=backbone_features,
-                mask_inputs=self.mask_downsample(mask_inputs_float),
-                high_res_features=high_res_features,
-            )
-        # In this method, we are treating mask_input as output, e.g. using it directly to create spatial mem;
-        # Below, we follow the same design axiom to use mask_input to decide if obj appears or not instead of relying
-        # on the object_scores from the SAM decoder.
-        is_obj_appearing = torch.any(mask_inputs.flatten(1).float() > 0.0, dim=1)
-        is_obj_appearing = is_obj_appearing[..., None]
-        lambda_is_obj_appearing = is_obj_appearing.float()
-        object_score_logits = out_scale * lambda_is_obj_appearing + out_bias
-        if self.pred_obj_scores:
-            if self.fixed_no_obj_ptr:
-                obj_ptr = lambda_is_obj_appearing * obj_ptr
-            obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_obj_ptr
+    # def _use_mask_as_output(self, backbone_features, high_res_features, mask_inputs):
+    #     """
+    #     Directly turn binary `mask_inputs` into a output mask logits without using SAM.
+    #     (same input and output shapes as in _forward_sam_heads above).
+    #     """
+    #     # Use -10/+10 as logits for neg/pos pixels (very close to 0/1 in prob after sigmoid).
+    #     out_scale, out_bias = 20.0, -10.0  # sigmoid(-10.0)=4.5398e-05
+    #     mask_inputs_float = mask_inputs.float()
+    #     high_res_masks = mask_inputs_float * out_scale + out_bias
+    #     low_res_masks = F.interpolate(
+    #         high_res_masks,
+    #         size=(high_res_masks.size(-2) // 4, high_res_masks.size(-1) // 4),
+    #         align_corners=False,
+    #         mode="bilinear",
+    #         antialias=True,  # use antialias for downsampling
+    #     )
+    #     # a dummy IoU prediction of all 1's under mask input
+    #     ious = mask_inputs.new_ones(mask_inputs.size(0), 1).float()
+    #     if not self.use_obj_ptrs_in_encoder:
+    #         # all zeros as a dummy object pointer (of shape [B, C])
+    #         obj_ptr = torch.zeros(
+    #             mask_inputs.size(0), self.hidden_dim, device=mask_inputs.device
+    #         )
+    #     else:
+    #         # produce an object pointer using the SAM decoder from the mask input
+    #         _, _, _, _, _, obj_ptr, _ = self._forward_sam_heads(
+    #             backbone_features=backbone_features,
+    #             mask_inputs=self.mask_downsample(mask_inputs_float),
+    #             high_res_features=high_res_features,
+    #         )
+    #     # In this method, we are treating mask_input as output, e.g. using it directly to create spatial mem;
+    #     # Below, we follow the same design axiom to use mask_input to decide if obj appears or not instead of relying
+    #     # on the object_scores from the SAM decoder.
+    #     is_obj_appearing = torch.any(mask_inputs.flatten(1).float() > 0.0, dim=1)
+    #     is_obj_appearing = is_obj_appearing[..., None]
+    #     lambda_is_obj_appearing = is_obj_appearing.float()
+    #     object_score_logits = out_scale * lambda_is_obj_appearing + out_bias
+    #     if self.pred_obj_scores:
+    #         if self.fixed_no_obj_ptr:
+    #             obj_ptr = lambda_is_obj_appearing * obj_ptr
+    #         obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_obj_ptr
 
-        return (
-            low_res_masks,
-            high_res_masks,
-            ious,
-            low_res_masks,
-            high_res_masks,
-            obj_ptr,
-            object_score_logits,
-        )
+    #     return (
+    #         low_res_masks,
+    #         high_res_masks,
+    #         ious,
+    #         low_res_masks,
+    #         high_res_masks,
+    #         obj_ptr,
+    #         object_score_logits,
+    #     )
 
     def forward_image(self, img_batch: torch.Tensor):
         """Get the image feature on the input batch."""
-        backbone_out = self.image_encoder(img_batch)
-        if self.use_high_res_features_in_sam:
-            # precompute projected level 0 and level 1 features in SAM decoder
-            # to avoid running it again on every SAM click
-            backbone_out["backbone_fpn"][0] = self.sam_mask_decoder.conv_s0(
-                backbone_out["backbone_fpn"][0]
-            )
-            backbone_out["backbone_fpn"][1] = self.sam_mask_decoder.conv_s1(
-                backbone_out["backbone_fpn"][1]
-            )
-        print("backbone_fpn:", backbone_out["backbone_fpn"][0].shape, backbone_out["backbone_fpn"][1].shape, backbone_out["backbone_fpn"][2].shape)
-        for vi in range(len(backbone_out["vision_pos_enc"])):
-            print(f"vision_pos_enc[{vi}]:", backbone_out["vision_pos_enc"][vi].shape)
+        # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
+        backbone_out = self.yolo.forward_backbone(img_batch)
+
         return backbone_out
 
     def _prepare_backbone_features(self, backbone_out):
@@ -546,18 +545,15 @@ class SAM2Base_yolo(torch.nn.Module):
         backbone_out = backbone_out.copy()
         assert len(backbone_out["backbone_fpn"]) == len(backbone_out["vision_pos_enc"])
         assert len(backbone_out["backbone_fpn"]) >= self.num_feature_levels
-        # print("self.num_feature_levels:", self.num_feature_levels)
+
         feature_maps = backbone_out["backbone_fpn"][-self.num_feature_levels :]
         vision_pos_embeds = backbone_out["vision_pos_enc"][-self.num_feature_levels :]
-        # print("feature_maps:", feature_maps[0].shape, feature_maps[1].shape, feature_maps[2].shape)
-        # print("vision_pos_embeds:", vision_pos_embeds[0].shape, vision_pos_embeds[1].shape, vision_pos_embeds[2].shape)
+
         feat_sizes = [(x.shape[-2], x.shape[-1]) for x in vision_pos_embeds]
         # flatten NxCxHxW to HWxNxC
         vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
         vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
-        # print("vision_feats:", vision_feats[0].shape, vision_feats[1].shape, vision_feats[2].shape)
-        # print("vision_pos_embeds:", vision_pos_embeds[0].shape, vision_pos_embeds[1].shape, vision_pos_embeds[2].shape)
-        # print("feat_sizes:", feat_sizes)
+
         return backbone_out, vision_feats, vision_pos_embeds, feat_sizes
 
     def _prepare_memory_conditioned_features(
@@ -726,8 +722,12 @@ class SAM2Base_yolo(torch.nn.Module):
             # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
             if self.directly_add_no_mem_embed:
                 # directly add no-mem embedding (instead of using the transformer encoder)
+                # print("current_vision_feats[-1]:", current_vision_feats[-1].shape)
+                # print("self.no_mem_embed:", self.no_mem_embed.shape, self.no_mem_embed)
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
                 pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+                # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
+                # sys.exit()
                 return pix_feat_with_mem
 
             # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
@@ -747,7 +747,7 @@ class SAM2Base_yolo(torch.nn.Module):
         )
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
-        # print("pix_feat_with_mem:", pix_feat_with_mem.shape)
+        # print("pix_feat_with_mem1:", pix_feat_with_mem.shape)
         # sys.exit()
         return pix_feat_with_mem
 
@@ -785,6 +785,9 @@ class SAM2Base_yolo(torch.nn.Module):
             mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
         if self.sigmoid_bias_for_mem_enc != 0.0:
             mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
+        # print("pix_feat:", pix_feat.shape)
+        # print("mask_for_mem:", mask_for_mem.shape)
+        # sys.exit()
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
@@ -820,6 +823,7 @@ class SAM2Base_yolo(torch.nn.Module):
     ):
         # current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
+        # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[1].shape, current_vision_feats[2].shape)
         if len(current_vision_feats) > 1:
             high_res_features = [
                 x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
@@ -873,11 +877,13 @@ class SAM2Base_yolo(torch.nn.Module):
             num_frames=num_frames,
             track_in_reverse=track_in_reverse,
         )
-        yolo_outputs = self._forward_yolo_heads(
-            backbone_features=pix_feat,
-            high_res_features=high_res_features,
-        )
+        # print("pix_feat:", pix_feat.shape)
+        # print("high_res_features:", high_res_features[0].shape, high_res_features[1].shape)
 
+        yolo_outputs = self._forward_yolo_neck_heads([high_res_features[0], high_res_features[1], pix_feat])
+        # print("yolo_outputs[0]:", yolo_outputs[0].shape)
+        # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
+        # sys.exit()
         return yolo_outputs, high_res_features, pix_feat
 
     
@@ -943,7 +949,7 @@ class SAM2Base_yolo(torch.nn.Module):
             for cls_idx in range(nc):
                 plt.subplot(1, nc, cls_idx + 1)
                 img = output_tensor[batch_idx, cls_idx].cpu().detach().numpy()
-                plt.imshow(img, cmap='hot', interpolation='nearest')
+                plt.imshow(img, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
                 plt.title(f'Class {cls_idx}')
                 plt.axis('off')
 

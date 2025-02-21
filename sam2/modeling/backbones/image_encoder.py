@@ -39,6 +39,7 @@ class ImageEncoder(nn.Module):
             "vision_pos_enc": pos,
             "backbone_fpn": features,
         }
+        
         return output
 
 

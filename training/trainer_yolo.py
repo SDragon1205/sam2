@@ -537,6 +537,11 @@ class Trainer_yolo:
             ignore_missing_keys=self.checkpoint_conf.skip_saving_parameters,
         )
 
+        if len(checkpoint["optimizer"]["param_groups"]) != len(self.optim.optimizer.state_dict()["param_groups"]):
+            print("Warning: Optimizer param groups do not match! Resetting optimizer.")
+            print("checkpoint[optimizer][param_groups]:", len(checkpoint["optimizer"]["param_groups"]))
+            print("len(self.optim.optimizer.state_dict()[param_groups])", len(self.optim.optimizer.state_dict()["param_groups"]))
+
         self.optim.optimizer.load_state_dict(checkpoint["optimizer"])
         self.loss.load_state_dict(checkpoint["loss"], strict=True)
 
@@ -561,7 +566,6 @@ class Trainer_yolo:
         model: nn.Module,
         phase: str,
     ):
-
         outputs = model(batch)
         # print("outputs:", outputs[0].shape, outputs[1].shape, outputs[2].shape)
         # print("outputs[0]:", outputs[0].shape)
@@ -626,10 +630,12 @@ class Trainer_yolo:
         nms_outputs = self.validator.postprocess(outputs)
         # for i_preds in range(len(nms_outputs)):
         #     print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
-        #     print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
+        #     print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
+        #     # print(f"Pred bbox: {nms_outputs[i_preds][:, :4].min().item(), nms_outputs[i_preds][:, :4].max().item()}")  # 預測框
         #     # print(f"nms_outputs[{i_preds}]: {nms_outputs[i_preds]}")
         
         self.validator.update_metrics(nms_outputs, targets)
+        # print("self.validator.imgsz:", self.validator.imgsz)
         # stats = self.validator.get_stats()
         # self.validator.check_stats(stats)
         # self.validator.finalize_metrics()
@@ -765,7 +771,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(val_loader):
-            visualize_batched_video(batch)
+            # visualize_batched_video(batch)
             # measure data loading time
             data_time.update(time.time() - end)
 
@@ -903,7 +909,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(train_loader):
-            visualize_batched_video(batch)
+            # visualize_batched_video(batch)
             # measure data loading time
             data_time_meter.update(time.time() - end)
             data_times.append(data_time_meter.val)

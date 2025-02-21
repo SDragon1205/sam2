@@ -553,6 +553,7 @@ class SA1BRawDataset_yolo(VOSRawDataset_yolo): # VisDrone_task1_Dataset
 
         # 讀取影像尺寸
         img = cv2.imread(image_path)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img_h, img_w = img.shape[:2]
 
         # 讀取標註資料
