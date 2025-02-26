@@ -9,16 +9,16 @@ Transforms and data augmentation for both image + bbox.
 """
 
 import logging
-
+import math
 import random
 from typing import Iterable
-
+import numpy as np
+import cv2
 import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
 import torchvision.transforms.v2.functional as Fv2
 from PIL import Image as PILImage
-
 from torchvision.transforms import InterpolationMode
 
 from training.utils.data_utils import VideoDatapoint, VideoDatapoint_yolo
@@ -742,3 +742,302 @@ class NormalizeAPI_yolo:
                 img.data = F.normalize(img.data, mean=self.mean, std=self.std)
 
         return datapoint
+
+class RandomAffine_yolo:
+    def __init__(self, p=0.5, degrees=10, translate=0.1, scale=0.1, shear=10, border=0, consistent_transform=True):
+        """
+        YOLO 格式 (x_center, y_center, width, height) 的仿射變換:
+        - `degrees`：旋轉角度範圍
+        - `translate`：最大平移比例 (相對於影像大小)
+        - `scale`：最大縮放比例
+        - `shear`：最大錯切角度
+        - `border`：影像邊界填充
+        - `consistent_transform`：所有影格是否使用相同變換 (適用於影片)
+        """
+        self.p = p
+        self.degrees = degrees
+        self.translate = translate
+        self.scale = scale
+        self.shear = shear
+        self.border = border
+        self.consistent_transform = consistent_transform
+
+    def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+        """
+        Args:
+            datapoint (VideoDatapoint_yolo): 包含 frames，每個 frame 有 `data` (影像) 和 `bboxes` (YOLO 格式 BBox)
+        Returns:
+            transformed datapoint
+        """
+        _, height, width = F.get_dimensions(datapoint.frames[0].data)
+        if self.consistent_transform:
+            affine_params = self.get_affine_params((height, width))
+            apply_affine =  random.random() < self.p
+
+        for i in range(len(datapoint.frames)):
+            if not self.consistent_transform:
+                affine_params = self.get_affine_params((height, width))
+                apply_affine =  random.random() < self.p
+            if apply_affine:
+                datapoint.frames[i] = self.transform_frame(datapoint.frames[i], affine_params)
+
+        return datapoint
+
+    def get_affine_params(self, img_size):
+        """隨機生成仿射變換參數"""
+        height, width = img_size
+
+        # 旋轉角度 (-degrees, +degrees)
+        angle = random.uniform(-self.degrees, self.degrees)
+        # print("angle:", angle)
+        # 縮放範圍 (1 - scale, 1 + scale)
+        scale = random.uniform(1 - self.scale, 1 + self.scale)
+        # 平移範圍 (translate * width, translate * height)
+        tx = random.uniform(-self.translate, self.translate) * width
+        ty = random.uniform(-self.translate, self.translate) * height
+        # 錯切角度 (-shear, +shear)
+        shear_x = math.tan(random.uniform(-self.shear, self.shear) * math.pi / 180)
+        shear_y = math.tan(random.uniform(-self.shear, self.shear) * math.pi / 180)
+
+        return angle, scale, tx, ty, shear_x, shear_y, width, height
+
+    def transform_frame(self, frame, affine_params):
+        """
+        變換單個 frame，包括影像與 YOLO BBox
+        """
+        angle, scale, tx, ty, shear_x, shear_y, width, height = affine_params
+        M = self.get_affine_matrix(angle, scale, tx, ty, shear_x, shear_y, width, height)
+
+        if isinstance(frame.data, PILImage.Image):  # 如果是 PIL 影像
+            frame.data = np.array(frame.data)  # 轉換為 NumPy 陣列
+        # print("frame.data.shape:", frame.data.shape)
+        # print("type(frame.data):", type(frame.data))
+        # # 變換影像
+        # if frame.data.ndim == 3 and frame.data.shape[0] in [1, 3]:  # PyTorch 格式 (C, H, W)
+        #     frame.data = frame.data.transpose(1, 2, 0)
+        # # frame.data = frame.data.astype(np.uint8)
+        # print("after frame.data.shape:", frame.data.shape)
+        frame.data = cv2.warpAffine(frame.data, M[:2], dsize=(width, height), flags=cv2.INTER_LINEAR, borderValue=(114, 114, 114))
+        frame.data = PILImage.fromarray(frame.data)
+
+        # 變換 BBox
+        frame.bboxes = self.transform_bboxes(frame.bboxes, M, width, height)
+
+        return frame
+
+    def get_affine_matrix(self, angle, scale, tx, ty, shear_x, shear_y, width, height):
+        """計算完整的仿射變換矩陣"""
+        R = np.eye(3)  # 旋轉 & 縮放
+        R[:2] = cv2.getRotationMatrix2D(center=(width / 2, height / 2), angle=angle, scale=scale)
+
+        T = np.eye(3)  # 平移
+        T[0, 2] = tx
+        T[1, 2] = ty
+
+        S = np.eye(3)  # 錯切
+        S[0, 1] = shear_x
+        S[1, 0] = shear_y
+
+        return S @ T @ R  # 順序: 錯切 → 平移 → 旋轉/縮放
+
+    def transform_bboxes(self, bboxes, M, width, height):
+        """
+        變換 YOLO BBox (x_center, y_center, w, h) 格式
+        """
+        if len(bboxes) == 0:
+            return []
+
+        transformed_bboxes = []
+        for bbox in bboxes:
+            x_center, y_center, w, h = bbox
+            x_center, y_center, w, h = x_center * width, y_center * height, w * width, h * height
+
+            # 轉換 BBox 為 corner (x1, y1, x2, y2)
+            x1, y1 = x_center - w / 2, y_center - h / 2
+            x2, y2 = x_center + w / 2, y_center + h / 2
+
+            # 轉換為齊次座標
+            corners = np.array([
+                [x1, y1, 1],
+                [x2, y1, 1],
+                [x1, y2, 1],
+                [x2, y2, 1]
+            ]).T
+
+            # 應用仿射變換
+            transformed_corners = M @ corners
+            transformed_corners = transformed_corners[:2, :].T  # 轉回 2D
+
+            # 取得新 BBox
+            x_min, y_min = transformed_corners[:, 0].min(), transformed_corners[:, 1].min()
+            x_max, y_max = transformed_corners[:, 0].max(), transformed_corners[:, 1].max()
+
+            # 限制範圍，防止超出邊界
+            x_min, y_min = max(0, x_min), max(0, y_min)
+            x_max, y_max = min(width, x_max), min(height, y_max)
+
+            # 計算新 BBox
+            new_x_center = (x_min + x_max) / 2 / width
+            new_y_center = (y_min + y_max) / 2 / height
+            new_w = (x_max - x_min) / width
+            new_h = (y_max - y_min) / height
+
+            # 檢查 BBox 是否有效
+            if new_w > 0.01 and new_h > 0.01:
+                transformed_bboxes.append((new_x_center, new_y_center, new_w, new_h))
+
+        return transformed_bboxes
+
+# class RandomAffine_yolo:
+#     def __init__(
+#         self,
+#         degrees,
+#         consistent_transform,
+#         scale=None,
+#         translate=None,
+#         shear=None,
+#         image_mean=(123, 116, 103),
+#         log_warning=True,
+#         num_tentatives=1,
+#         image_interpolation="bicubic",
+#     ):
+#         """
+#         YOLO BBox 版的 RandomAffine
+#         如果 consistent_transform=True，則所有 frames 共享相同的隨機仿射變換。
+#         """
+#         self.degrees = degrees if isinstance(degrees, list) else ([-degrees, degrees])
+#         self.scale = scale
+#         self.shear = (
+#             shear if isinstance(shear, list) else ([-shear, shear] if shear else None)
+#         )
+#         self.translate = translate
+#         self.fill_img = image_mean
+#         self.consistent_transform = consistent_transform
+#         self.log_warning = log_warning
+#         self.num_tentatives = num_tentatives
+
+#         if image_interpolation == "bicubic":
+#             self.image_interpolation = InterpolationMode.BICUBIC
+#         elif image_interpolation == "bilinear":
+#             self.image_interpolation = InterpolationMode.BILINEAR
+#         else:
+#             raise NotImplementedError
+
+#     def __call__(self, datapoint: VideoDatapoint_yolo, **kwargs):
+#         """
+#         對 YOLO dataset 進行仿射變換
+#         """
+#         for _tentative in range(self.num_tentatives):
+#             res = self.transform_datapoint(datapoint)
+#             if res is not None:
+#                 return res
+
+#         if self.log_warning:
+#             logging.warning(
+#                 f"Skip RandomAffine for zero-area bbox in first frame after {self.num_tentatives} attempts"
+#             )
+#         return datapoint
+
+#     def transform_datapoint(self, datapoint: VideoDatapoint_yolo):
+#         _, height, width = F.get_dimensions(datapoint.frames[0].data)
+#         img_size = [width, height]
+
+#         if self.consistent_transform:
+#             # 產生全局隨機仿射變換參數
+#             affine_params = T.RandomAffine.get_params(
+#                 degrees=self.degrees,
+#                 translate=self.translate,
+#                 scale_ranges=self.scale,
+#                 shears=self.shear,
+#                 img_size=img_size,
+#             )
+
+#         for img_idx, img in enumerate(datapoint.frames):
+#             if not self.consistent_transform:
+#                 # 為每個 frame 單獨產生仿射變換參數
+#                 affine_params = T.RandomAffine.get_params(
+#                     degrees=self.degrees,
+#                     translate=self.translate,
+#                     scale_ranges=self.scale,
+#                     shears=self.shear,
+#                     img_size=img_size,
+#                 )
+#             print("affine_params:", affine_params)
+#             # 轉換 BBox
+#             transformed_bboxes = self._transform_bboxes(img.bboxes, affine_params, width, height)
+            
+#             # 轉換影像
+#             img.data = F.affine(
+#                 img.data,
+#                 *affine_params,
+#                 interpolation=self.image_interpolation,
+#                 fill=self.fill_img,
+#             )
+
+#             # 更新 BBoxes
+#             img.bboxes = transformed_bboxes
+
+#         return datapoint
+
+#     def _transform_bboxes(self, bboxes, affine_params, img_w, img_h):
+#         """
+#         使用仿射變換更新 YOLO 格式的 BBox
+#         YOLO 格式：(x_center, y_center, width, height) ∈ [0, 1]
+#         """
+#         if len(bboxes) == 0:
+#             return []
+
+#         angle, translations, scale, shear = affine_params
+#         tx, ty = translations  # 平移
+#         sx, sy = shear  # 錯切
+
+#         # 轉換 BBox 為 (x1, y1, x2, y2) 格式
+#         new_bboxes = []
+#         for bbox in bboxes:
+#             x_center, y_center, width, height = bbox
+
+#             # 轉換到 pixel space
+#             x_center *= img_w
+#             y_center *= img_h
+#             width *= img_w
+#             height *= img_h
+
+#             # 取得 BBox 角點
+#             x1, y1 = x_center - width / 2, y_center - height / 2
+#             x2, y2 = x_center + width / 2, y_center + height / 2
+
+#             # 構建 corner points
+#             corners = torch.tensor([
+#                 [x1, y1], [x2, y1], [x1, y2], [x2, y2]
+#             ], dtype=torch.float)
+
+#             # 建立仿射變換矩陣
+#             theta = torch.tensor([
+#                 [math.cos(math.radians(angle)), -math.sin(math.radians(angle)), tx * img_w],
+#                 [math.sin(math.radians(angle)),  math.cos(math.radians(angle)), ty * img_h]
+#             ])
+
+#             # 應用仿射變換
+#             ones = torch.ones((corners.shape[0], 1))
+#             corners_homo = torch.cat([corners, ones], dim=1).T  # [3, N]
+#             transformed_corners = theta @ corners_homo  # [2, N]
+
+#             # 取得變換後的新 BBox
+#             x_min, y_min = transformed_corners.min(dim=1).values
+#             x_max, y_max = transformed_corners.max(dim=1).values
+
+#             # 轉回 YOLO 格式
+#             new_x_center = (x_min + x_max) / 2 / img_w
+#             new_y_center = (y_min + y_max) / 2 / img_h
+#             new_width = (x_max - x_min) / img_w
+#             new_height = (y_max - y_min) / img_h
+
+#             # 限制 BBox 在 [0,1] 範圍內
+#             new_bboxes.append((
+#                 max(0, min(1, new_x_center)),
+#                 max(0, min(1, new_y_center)),
+#                 max(0, min(1, new_width)),
+#                 max(0, min(1, new_height))
+#             ))
+
+#         return new_bboxes

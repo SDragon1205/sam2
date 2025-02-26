@@ -71,7 +71,7 @@ class maP50_Validator:
         idx = batch["batch_idx"] == si
         cls = batch["cls"][idx].squeeze(-1)
         bbox = batch["bboxes"][idx]
-        ori_shape = batch["ori_shape"][si]
+        # ori_shape = batch["ori_shape"][si]
         imgsz = (self.imgsz, self.imgsz)
         # ratio_pad = batch["ratio_pad"][si]
         # print("ori_shape:", ori_shape, type(ori_shape))
@@ -84,7 +84,7 @@ class maP50_Validator:
         if len(cls):
             bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
             # ops.scale_boxes(imgsz, bbox, ori_shape)#, ratio_pad=ratio_pad)  # native-space labels
-        return {"cls": cls, "bbox": bbox, "ori_shape": ori_shape, "imgsz": imgsz}#, "ratio_pad": ratio_pad}
+        return {"cls": cls, "bbox": bbox, "imgsz": imgsz}#, "ori_shape": ori_shape}#, "ratio_pad": ratio_pad}
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
@@ -107,9 +107,9 @@ class maP50_Validator:
             pbatch = self._prepare_batch(si, batch)
             if pbatch == None:
                 self.seen -= 1
-                # print("====================================================================")
-                # print("                    NO            PREDICTION                        ")
-                # print("====================================================================")
+                print("====================================================================")
+                print("         NO         GROUNDTRUTH         IN         BATCH            ")
+                print("====================================================================")
                 continue
             cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
             # print(f"GT bbox: {bbox.min().item(), bbox.max().item()}")  # Ground Truth bbox

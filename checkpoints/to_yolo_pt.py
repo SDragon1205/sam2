@@ -128,6 +128,8 @@ for k, v in state_dict_copy.items():  # 第一層
             if "model" in k:  # 假設 "model" 是主要的層
                 for param_name, param_value in state_dict_yolo['model'].state_dict().items():
                     v[f"yolo.detection_model.{param_name}"] = param_value
+                # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
+                #     v[f"freeze_model.model.{param_name}"] = param_value
                 v["no_mem_embed"] = no_mem_embed
                 v["no_mem_pos_enc"] = no_mem_pos_enc
                 for param_name, param_value in memory_encoder.state_dict().items():

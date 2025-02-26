@@ -248,11 +248,23 @@ class YOLOMTrain(YOLOMBase):
         #         num_init_cond_frames - 1,
         #         replace=False,
         #     ).tolist()
+        # print("self.init_cond_frames_mode:", self.init_cond_frames_mode)
+        if self.init_cond_frames_mode == 0:
+            init_cond_frames = [start_frame_idx] + self.rng.choice(
+                range(start_frame_idx + 1, num_frames),
+                num_init_cond_frames - 1,
+                replace=False,
+            ).tolist()
+            # print("range(start_frame_idx + 1, num_frames):", range(start_frame_idx + 1, num_frames))
+            # print("num_init_cond_frames - 1:", num_init_cond_frames - 1)
+            # print("num_frames:", num_frames)
+        elif self.init_cond_frames_mode == 1:
+            init_cond_frames = [start_frame_idx]
+        else:
+            init_cond_frames = [
+                t for t in range(start_frame_idx, num_frames)
+            ]
 
-        init_cond_frames = [start_frame_idx]
-        # init_cond_frames = [
-        #     t for t in range(start_frame_idx, num_frames)
-        # ]
         backbone_out["init_cond_frames"] = init_cond_frames
         backbone_out["frames_not_in_init_cond"] = [
             t for t in range(start_frame_idx, num_frames) if t not in init_cond_frames
@@ -322,6 +334,32 @@ class YOLOMTrain(YOLOMBase):
 
         return backbone_out
 
+    def get_gt_from_first_frame(self, gtdata, img_ids):
+        """
+        從 gtdata 中篩選出 batch_idx 與 img_ids 相符的數據
+        :param gtdata: Dict，包含 batch_idx、cls、bboxes 等數據
+        :param img_ids: Tensor or List，包含需要篩選的 batch_idx
+        :return: 篩選後的 batch_idx, cls, bboxes
+        """
+        # print("gtdata:", gtdata)
+        # 確保 img_ids 是 tensor
+        # img_ids = torch.tensor(img_ids, device=gtdata["batch_idx"].device)
+        img_ids_clone = img_ids.clone().to(gtdata["batch_idx"].device)
+        # print("gtdata[batch_idx].device:", gtdata["batch_idx"].device)
+        # 過濾符合 img_ids 的索引
+        mask = torch.isin(gtdata["batch_idx"], img_ids_clone)
+
+        # 取得對應的 batch_idx, cls, bboxes
+        batch_idx_filtered = gtdata["batch_idx"][mask]
+        cls_filtered = gtdata["cls"][mask]
+        bboxes_filtered = gtdata["bboxes"][mask]
+
+        # print("batch_idx_filtered:", batch_idx_filtered)
+        # print("cls_filtered:", cls_filtered)
+        # print("bboxes_filtered:", bboxes_filtered)
+        # sys.exit()
+        return (batch_idx_filtered, cls_filtered, bboxes_filtered)
+    
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False
     ):
@@ -369,11 +407,17 @@ class YOLOMTrain(YOLOMBase):
         #     torch.zeros(batch_size, 74, hw_size1, hw_size1, device=self.device),
         #     torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device)
         # ]
-
+        # print("init_cond_frames:", init_cond_frames)
         for stage_id in processing_order:
+            # print("stage_id:", stage_id)
             # Get the image features for the current frames
             # img_ids = input.find_inputs[stage_id].img_ids
             img_ids = input.flat_obj_to_img_idx[stage_id]
+
+            init_cond_frames_gt = None
+            if stage_id == 0 and self.use_gt_in_first_frame:
+                init_cond_frames_gt = self.get_gt_from_first_frame(input.gtdata, img_ids)
+
             if img_feats_already_computed:
                 # Retrieve image features according to img_ids (if they are already computed).
                 current_vision_feats = [x[:, img_ids] for x in vision_feats]
@@ -404,6 +448,8 @@ class YOLOMTrain(YOLOMBase):
                 # frames_to_add_correction_pt=frames_to_add_correction_pt,
                 output_dict=output_dict,
                 num_frames=num_frames,
+                init_cond_frames_gt=init_cond_frames_gt,
+                img_ids=img_ids,
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames #or (
@@ -460,11 +506,13 @@ class YOLOMTrain(YOLOMBase):
         # mask_inputs,
         output_dict,
         num_frames,
+        img_ids,
         track_in_reverse=False,  # tracking in reverse time order (for demo usage)
         run_mem_encoder=True,  # Whether to run the memory encoder on the predicted masks.
         prev_sam_mask_logits=None,  # The previously predicted SAM mask logits.
         # frames_to_add_correction_pt=None,
         # gt_masks=None,
+        init_cond_frames_gt=None,
     ):
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
@@ -553,7 +601,9 @@ class YOLOMTrain(YOLOMBase):
             # high_res_masks,
             # object_score_logits,
             # current_out,
-            yolo_outputs_clone
+            yolo_outputs_clone,
+            img_ids,
+            init_cond_frames_gt,
         )
 
         # # 比較 yolo_outputs[0]

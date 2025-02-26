@@ -19,6 +19,7 @@ from sam2.modeling.sam2_utils import get_1d_sine_pe, MLP, select_closest_cond_fr
 from ultralytics.utils import ops
 import matplotlib.pyplot as plt
 import sys
+from ultralytics import YOLO
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
 
@@ -101,6 +102,9 @@ class YOLOMBase(torch.nn.Module):
         detect_ch = [128, 256, 512],
         detect_stride = [ 8., 16., 32.],
         hidden_dim=512,
+        init_cond_frames_mode=0,
+        mask_for_mem_sigmoid=False,
+        use_gt_in_first_frame=False,
     ):
         super().__init__()
 
@@ -193,7 +197,7 @@ class YOLOMBase(torch.nn.Module):
         self.detect_stride = detect_stride
         # self._build_yolo()
         self.max_cond_frames_in_attn = max_cond_frames_in_attn
-
+        self.init_cond_frames_mode = init_cond_frames_mode
         # # Model compilation
         # if compile_image_encoder:
         #     # Compile the forward function (not the full module) to allow loading checkpoints.
@@ -206,6 +210,8 @@ class YOLOMBase(torch.nn.Module):
         #         fullgraph=True,
         #         dynamic=False,
         #     )
+        self.mask_for_mem_sigmoid = mask_for_mem_sigmoid
+        self.use_gt_in_first_frame=use_gt_in_first_frame
 
     @property
     def device(self):
@@ -537,8 +543,11 @@ class YOLOMBase(torch.nn.Module):
         # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
         backbone_out = self.yolo.forward_backbone(img_batch)
-
-        return backbone_out
+        # gt_yolo_out = self.freeze_model.model._predict_once(img_batch)
+        # print("gt_yolo_out[0]:", gt_yolo_out[0].shape)
+        # print("gt_yolo_out[1]:", gt_yolo_out[1][0].shape, gt_yolo_out[1][1].shape, gt_yolo_out[1][2].shape)
+        # sys.exit()
+        return backbone_out#, gt_yolo_out
 
     def _prepare_backbone_features(self, backbone_out):
         """Prepare and flatten visual features."""
@@ -597,6 +606,8 @@ class YOLOMBase(torch.nn.Module):
                 frame_idx, cond_outputs, self.max_cond_frames_in_attn
             )
             t_pos_and_prevs = [(0, out) for out in selected_cond_outputs.values()]
+            # print("0 t_pos_and_prevs:", t_pos_and_prevs)
+            # print("len(selected_cond_outputs.values()):", len(selected_cond_outputs.values()))
             # Add last (self.num_maskmem - 1) frames before current frame for non-conditioning memory
             # the earliest one has t_pos=1 and the latest one has t_pos=self.num_maskmem-1
             # We also allow taking the memory frame non-consecutively (with stride>1), in which case
@@ -626,8 +637,9 @@ class YOLOMBase(torch.nn.Module):
                         prev_frame_idx = -(-(frame_idx + 2) // stride) * stride
                         # then seek further among every r-th frames
                         prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
-                # print("prev_frame_idx:", prev_frame_idx)
+                # print(f"t_pos, prev_frame_idx:, {t_pos}, {prev_frame_idx}")
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
+                # print("out:", out)
                 if out is None:
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                     # frames, we still attend to it as if it's a non-conditioning frame.
@@ -649,8 +661,9 @@ class YOLOMBase(torch.nn.Module):
                 maskmem_enc = (
                     maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                 )
+                # print("t_pos, self.num_maskmem - t_pos - 1:", t_pos, self.num_maskmem - t_pos - 1)
                 to_cat_memory_pos_embed.append(maskmem_enc)
-
+            # print("")
             # # Construct the list of past object pointers
             # if self.use_obj_ptrs_in_encoder:
             #     max_obj_ptrs_in_encoder = min(num_frames, self.max_obj_ptrs_in_encoder)
@@ -779,7 +792,13 @@ class YOLOMBase(torch.nn.Module):
         # else:
         #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
         #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
-        mask_for_mem = pred_masks_high_res
+
+        if self.mask_for_mem_sigmoid:
+            # print("mask_for_mem_sigmoid")
+            mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        else:
+            mask_for_mem = pred_masks_high_res
+
         # apply scale and bias terms to the sigmoid probabilities
         if self.sigmoid_scale_for_mem_enc != 1.0:
             mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
@@ -886,6 +905,27 @@ class YOLOMBase(torch.nn.Module):
         # sys.exit()
         return yolo_outputs, high_res_features, pix_feat
 
+    def visualize_output_tensor(self, output_tensor, batch_idx=0):
+            """
+            可視化特定 batch 的 output_tensor。
+
+            Args:
+                output_tensor (torch.Tensor): [batch_size, nc, 1024, 1024] 的張量。
+                batch_idx (int): 要可視化的 batch 索引，預設為 0。
+            """
+            nc = output_tensor.shape[1]  # 類別數量
+
+            plt.figure(figsize=(15, 5))
+            for cls_idx in range(nc):
+                plt.subplot(1, nc, cls_idx + 1)
+                img = output_tensor[batch_idx, cls_idx].cpu().detach().numpy()
+                plt.imshow(img, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
+                plt.title(f'Class {cls_idx}')
+                plt.axis('off')
+
+            plt.tight_layout()
+            plt.show()
+            sys.exit()
     
     def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.001, iou=0.7, agnostic_nms=False, max_det=300): #conf=0.25
         # print("old_preds:", preds[0].shape, preds[1][0].shape, preds[1][1].shape, preds[1][2].shape)
@@ -909,9 +949,9 @@ class YOLOMBase(torch.nn.Module):
         # for i_preds in range(len(preds)):
         #     print(f"new_preds[{i_preds}]:", preds[i_preds])
         #     print(f"new_preds[{i_preds}]:", preds[i_preds].shape)
-
+        for pred in preds:
+            assert len(pred) != 0, f"_get_high_res_masks_from_yolo_outputs get 0 pred"
         high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)#.clone()
-
         for idx, pred in enumerate(preds):
             for box in pred:
                 x1, y1, x2, y2, conf, cls = box
@@ -935,32 +975,56 @@ class YOLOMBase(torch.nn.Module):
 
                 # current_mask = high_res_masks[idx, cls, y1:y2+1, x1:x2+1]
                 # high_res_masks[idx, cls, y1:y2+1, x1:x2+1] = torch.max(current_mask, conf)
-        def visualize_output_tensor(output_tensor, batch_idx=0):
-            """
-            可視化特定 batch 的 output_tensor。
-
-            Args:
-                output_tensor (torch.Tensor): [batch_size, nc, 1024, 1024] 的張量。
-                batch_idx (int): 要可視化的 batch 索引，預設為 0。
-            """
-            nc = output_tensor.shape[1]  # 類別數量
-
-            plt.figure(figsize=(15, 5))
-            for cls_idx in range(nc):
-                plt.subplot(1, nc, cls_idx + 1)
-                img = output_tensor[batch_idx, cls_idx].cpu().detach().numpy()
-                plt.imshow(img, cmap='hot', interpolation='nearest', vmin=0, vmax=1)
-                plt.title(f'Class {cls_idx}')
-                plt.axis('off')
-
-            plt.tight_layout()
-            plt.show()
-            sys.exit()
-        # visualize_output_tensor(high_res_masks, 0)
-        # visualize_output_tensor(high_res_masks, 1)
+        # self.visualize_output_tensor(high_res_masks, 0)
+        # self.visualize_output_tensor(high_res_masks, 1)
         # print("high_res_masks:", high_res_masks)
         # sys.exit()
         return high_res_masks
+    
+    def _get_high_res_masks_from_gt(self, init_cond_frames_gt, img_ids, device):
+        """
+        根據 Ground Truth bbox 建立高解析度 Mask
+        :param init_cond_frames_gt: Tuple (batch_idx, cls, bboxes) - get_gt_from_first_frame 的輸出
+        :param img_ids: Tensor or List - 需要處理的 batch_idx
+        :param device: str - 目標裝置
+        :return: high_res_masks (Tensor) - (batch, num_classes, image_size, image_size)
+        """
+        batch_idx_filtered, cls_filtered, bboxes_filtered = init_cond_frames_gt
+        batch_idx_filtered = batch_idx_filtered.to(device)
+        cls_filtered = cls_filtered.to(device)
+        bboxes_filtered = bboxes_filtered.to(device)
+
+        # 初始化高解析度 masks
+        high_res_masks = torch.zeros((len(img_ids), self.detect_nc, self.image_size, self.image_size), device=device)
+
+        for i_batch, img_id in enumerate(img_ids):
+            # 取得當前 img_id 對應的 batch_idx 的 mask
+            # print("img_id.device:", img_id.device)
+            # print("batch_idx_filtered.device:", batch_idx_filtered.device)
+            mask = batch_idx_filtered == img_id
+            cls_list = cls_filtered[mask].long()  # 確保 cls 是 long 張量
+            bboxes = bboxes_filtered[mask]  # bbox 格式為 (xywh), 且已歸一化 0~1
+
+            for i in range(bboxes.shape[0]):
+                x, y, w, h = bboxes[i]
+                cls_idx = cls_list[i]  # 對應的 class index
+
+                # 計算像素座標 (轉換到 image_size)
+                x_min = int((x - w / 2) * self.image_size)
+                y_min = int((y - h / 2) * self.image_size)
+                x_max = int((x + w / 2) * self.image_size)
+                y_max = int((y + h / 2) * self.image_size)
+
+                # 限制 bbox 在範圍內
+                x_min, x_max = max(0, x_min), min(self.image_size - 1, x_max)
+                y_min, y_max = max(0, y_min), min(self.image_size - 1, y_max)
+
+                # 填充 bbox 到對應的 class channel
+                high_res_masks[i_batch, cls_idx, y_min:y_max + 1, x_min:x_max + 1] = 1.0
+        # self.visualize_output_tensor(high_res_masks, 0)
+        if not self.training:
+            return high_res_masks
+        return high_res_masks.requires_grad_(True)
     
     def _encode_memory_in_output(
         self,
@@ -972,9 +1036,19 @@ class YOLOMBase(torch.nn.Module):
         # object_score_logits,
         # current_out,
         yolo_outputs,
+        img_ids,
+        init_cond_frames_gt,
     ):
         if run_mem_encoder and self.num_maskmem > 0:
-            high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
+            # if self.use_freeze_model:
+            #     high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
+            # else:
+            # print("yolo_outputs[0].device:", yolo_outputs[0].device)
+            if init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
+                high_res_masks_for_mem_enc = self._get_high_res_masks_from_gt(init_cond_frames_gt, img_ids, yolo_outputs[0].device)
+                # print("_get_high_res_masks_from_gt")
+            else:
+                high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                 current_vision_feats=current_vision_feats,
                 feat_sizes=feat_sizes,

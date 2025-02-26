@@ -674,6 +674,10 @@ class Trainer_yolo:
             self.train_dataset = instantiate(self.data_conf.train)
 
     def run_train(self):
+        # for name, param in self.model.module.yolo.named_parameters():
+        #     print(f"Parameter Name: {name}, requires_grad: {param.requires_grad}, Shape: {param.shape}")
+        #     param.requires_grad = False
+        # sys.exit
         # print("self.epoch:", self.epoch)
         # print("self.max_epochs:", self.max_epochs)
         while self.epoch < self.max_epochs:
@@ -910,6 +914,7 @@ class Trainer_yolo:
 
         for data_iter, batch in enumerate(train_loader):
             # visualize_batched_video(batch)
+            # sys.exit()
             # measure data loading time
             data_time_meter.update(time.time() - end)
             data_times.append(data_time_meter.val)
