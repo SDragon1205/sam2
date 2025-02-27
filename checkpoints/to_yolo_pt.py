@@ -6,7 +6,8 @@ from sam2.modeling.position_encoding import PositionEmbeddingSine
 from sam2.modeling.memory_attention import MemoryAttention, MemoryAttentionLayer
 from sam2.modeling.sam.transformer import RoPEAttention
 from iopath.common.file_io import g_pathmgr
-
+from typing import List, Optional, Tuple, Type
+import sys
 # ckpt_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolo_sam2.1_hiera_b+_MOSE_finetune.yaml/checkpoints/checkpoint.pt"
 ckpt_path = "/home/si2/sdragon/sam2/checkpoints/sam2.1_hiera_base_plus.pt"
 with g_pathmgr.open(ckpt_path, "rb") as f:
@@ -121,6 +122,31 @@ memory_attention= MemoryAttention(
 # for k, v in memory_attention.state_dict().items():  # 第一層
 #     print(k)
 # 使用兩層迴圈插入 yolo_detection_head 的參數
+transformer_dim=512
+activation = nn.GELU
+output_upscaling = nn.Sequential(
+                    nn.ConvTranspose2d(
+                        transformer_dim, transformer_dim // 2, kernel_size=2, stride=2
+                    ),
+                    nn.GroupNorm(num_groups=32, num_channels=transformer_dim // 2),
+                    activation(),
+                    nn.ConvTranspose2d(
+                        transformer_dim // 2, transformer_dim // 4, kernel_size=2, stride=2
+                    ),
+                    activation(),
+                )
+# for k, v in output_upscaling.state_dict().items():  # 第一層
+#     print(k)
+# sys.exit()
+
+# Temporal encoding of the memories
+num_maskmem = 1
+mem_dim = 64
+maskmem_tpos_enc = torch.nn.Parameter(
+    torch.zeros(num_maskmem, 1, 1, mem_dim)
+)
+trunc_normal_(maskmem_tpos_enc, std=0.02)
+
 for k, v in state_dict_copy.items():  # 第一層
     if isinstance(v, dict):  # 如果值是字典，進入第二層
         for k1 in v.keys():  # 第二層鍵
@@ -136,6 +162,9 @@ for k, v in state_dict_copy.items():  # 第一層
                     v[f"memory_encoder.{param_name}"] = param_value
                 for param_name, param_value in memory_attention.state_dict().items():
                     v[f"memory_attention.{param_name}"] = param_value
+                for param_name, param_value in output_upscaling.state_dict().items():
+                    v[f"yolo.output_upscaling.{param_name}"] = param_value
+                v["maskmem_tpos_enc"] = maskmem_tpos_enc
                 break  # 插入後結束第二層迴圈
         break  # 插入後結束第一層迴圈
 for k, v in state_dict_copy.items():  # 第一層
@@ -146,7 +175,7 @@ for k, v in state_dict_copy.items():  # 第一層
     else:
         print("other:", k, v)
 
-output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_output_upscaling.pt"
 
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)

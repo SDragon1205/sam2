@@ -2,6 +2,9 @@
 
 scratch:
   init_cond_frames_mode: 1
+  mask_for_mem_sigmoid: False
+  use_gt_in_first_frame: True
+  skip_first_frame: False
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
@@ -170,7 +173,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: train_only #val # train_only
+  mode: val #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -332,8 +335,9 @@ trainer:
     # detect_ch: ${scratch.ch}
     # detect_stride: ${scratch.stride}
     init_cond_frames_mode: ${scratch.init_cond_frames_mode}
-    mask_for_mem_sigmoid: True
-    use_gt_in_first_frame: True
+    mask_for_mem_sigmoid: ${scratch.mask_for_mem_sigmoid}
+    use_gt_in_first_frame: ${scratch.use_gt_in_first_frame}
+    skip_first_frame: ${scratch.skip_first_frame}
 
   validator:
     _target_: training.validator.maP50_Validator

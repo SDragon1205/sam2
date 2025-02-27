@@ -567,6 +567,8 @@ class Trainer_yolo:
         phase: str,
     ):
         outputs = model(batch)
+        # print("after input.gtdata:", batch.gtdata)
+        # sys.exit()
         # print("outputs:", outputs[0].shape, outputs[1].shape, outputs[2].shape)
         # print("outputs[0]:", outputs[0].shape)
         # print("outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
@@ -576,6 +578,7 @@ class Trainer_yolo:
         #     for i_mpmhs in range(len(outputs_i["multistep_pred_multimasks_high_res"])):
         #         print(f"outputs[multistep_pred_multimasks_high_res][{i_mpmhs}]:", outputs_i["multistep_pred_multimasks_high_res"][i_mpmhs].shape)
         targets = batch.gtdata
+        # print("targets:", targets)
         # print("self.device:", self.device)
         for tkey, tvalue in targets.items():
             if isinstance(tvalue, torch.Tensor):
@@ -856,7 +859,14 @@ class Trainer_yolo:
         stats = self.validator.get_stats()
         self.validator.check_stats(stats)
         self.validator.finalize_metrics()
-        self.validator.print_results()
+        # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
+        seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
+        # self.logger.log("Metrics/Images", seen, self.epoch)
+        # self.logger.log("Metrics/Instances", nt_per_class, self.epoch)
+        # self.logger.log("Metrics/Precision", result0, self.epoch)
+        # self.logger.log("Metrics/Recall", result1, self.epoch)
+        # self.logger.log("Metrics/mAP50", result2, self.epoch)
+        # self.logger.log("Metrics/mAP50-95", result3, self.epoch)
 
         return out_dict
 
@@ -1010,7 +1020,13 @@ class Trainer_yolo:
         stats = self.validator.get_stats()
         self.validator.check_stats(stats)
         self.validator.finalize_metrics()
-        self.validator.print_results()
+        seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
+        self.logger.log(f"Metrics/{phase}_Images", seen, self.epoch)
+        self.logger.log(f"Metrics/{phase}_Instances", nt_per_class, self.epoch)
+        self.logger.log(f"Metrics/{phase}_Precision", result0, self.epoch)
+        self.logger.log(f"Metrics/{phase}_Recall", result1, self.epoch)
+        self.logger.log(f"Metrics/{phase}_mAP50", result2, self.epoch)
+        self.logger.log(f"Metrics/{phase}_mAP50-95", result3, self.epoch)
 
         return out_dict
 

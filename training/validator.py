@@ -216,3 +216,4 @@ class maP50_Validator:
         print(f"Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})")
         print("====================================================================")
         # sys.exit()
+        return self.seen, self.nt_per_class.sum(), result[0], result[1], result[2], result[3]

@@ -2,6 +2,9 @@
 
 scratch:
   init_cond_frames_mode: 0
+  #origin no skip_first_frame
+  skip_first_frame: True
+  zero_in_bd: True
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
@@ -332,6 +335,8 @@ trainer:
     # detect_ch: ${scratch.ch}
     # detect_stride: ${scratch.stride}
     init_cond_frames_mode: ${scratch.init_cond_frames_mode}
+    skip_first_frame: ${scratch.skip_first_frame}
+    zero_in_bd: ${scratch.zero_in_bd}
 
   validator:
     _target_: training.validator.maP50_Validator

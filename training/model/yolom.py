@@ -71,6 +71,7 @@ class YOLOMTrain(YOLOMBase):
         # detect_nc = 10,
         # detect_ch = [256, 64, 32],
         # detect_stride = [16., 8., 4.],
+        skip_first_frame: bool = False,
         **kwargs,
     ):
         super().__init__(yolo, memory_attention, memory_encoder, **kwargs)
@@ -104,7 +105,7 @@ class YOLOMTrain(YOLOMBase):
         self.prob_to_sample_from_gt_for_train = prob_to_sample_from_gt_for_train
         # A random number generator with a fixed initial seed across GPUs
         self.rng = np.random.default_rng(seed=42)
-
+        self.skip_first_frame = skip_first_frame
         # if freeze_image_encoder:
         #     for p in self.image_encoder.parameters():
         #         p.requires_grad = False
@@ -334,7 +335,7 @@ class YOLOMTrain(YOLOMBase):
 
         return backbone_out
 
-    def get_gt_from_first_frame(self, gtdata, img_ids):
+    def get_gt_from_img_ids_frame(self, gtdata, img_ids):
         """
         從 gtdata 中篩選出 batch_idx 與 img_ids 相符的數據
         :param gtdata: Dict，包含 batch_idx、cls、bboxes 等數據
@@ -359,6 +360,59 @@ class YOLOMTrain(YOLOMBase):
         # print("bboxes_filtered:", bboxes_filtered)
         # sys.exit()
         return (batch_idx_filtered, cls_filtered, bboxes_filtered)
+    
+    def skip_first_frame_gtdata_0(self, gtdata):
+        """
+        移除 batch_idx 為 0 的資料，並將其餘 batch_idx 減 1
+        :param gtdata: Dict，包含 batch_idx, cls, bboxes
+        :return: 過濾後的 gtdata
+        """
+        # 取得 batch_idx ≠ 0 的索引
+        mask = gtdata["batch_idx"] != 0
+
+        # 過濾 batch_idx, cls, bboxes
+        gtdata_filtered = {
+            "batch_idx": gtdata["batch_idx"][mask] - 1,  # 剩餘的 batch_idx -1
+            "cls": gtdata["cls"][mask],
+            "bboxes": gtdata["bboxes"][mask],
+            "ori_shape": [shape for i, shape in enumerate(gtdata["ori_shape"]) if gtdata["batch_idx"][i] != 0]
+        }
+
+        lengths = {
+            "batch_idx": len(gtdata_filtered["batch_idx"]),
+            "cls": len(gtdata_filtered["cls"]),
+            "bboxes": len(gtdata_filtered["bboxes"]),
+            "ori_shape": len(gtdata_filtered["ori_shape"])
+        }
+        
+        # 檢查所有長度是否相等
+        if len(set(lengths.values())) != 1:
+            raise ValueError(f"Mismatch in lengths: {lengths}")
+
+        return gtdata_filtered
+    
+    def remove_batch_0(self, all_frame_outputs):
+        """
+        移除 all_frame_outputs 中 batch index 為 0 的資料
+        :param all_frame_outputs: List，包含多個不同形狀的 tensor
+        :return: 過濾後的 all_frame_outputs
+        """
+        batch_size = all_frame_outputs[0].shape[0]  # 獲取 batch_size
+        if batch_size <= 1:
+            raise ValueError("Batch size must be greater than 1 to remove batch 0.")
+
+        # ✅ 取得 batch != 0 的 mask
+        batch_mask = torch.arange(batch_size, device=all_frame_outputs[0].device) != 0
+
+        # ✅ 過濾第一個 tensor (形狀: (batch_size, 14, 8400))
+        filtered_outputs = [all_frame_outputs[0][batch_mask]]  # 保留 batch_id ≠ 0 的資料
+
+        # ✅ 過濾 nested list (形狀: (batch_size, 74, hw_size, hw_size))
+        filtered_nested = [
+            tensor[batch_mask] for tensor in all_frame_outputs[1]
+        ]
+
+        return (filtered_outputs[0], filtered_nested)
     
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False
@@ -409,14 +463,17 @@ class YOLOMTrain(YOLOMBase):
         # ]
         # print("init_cond_frames:", init_cond_frames)
         for stage_id in processing_order:
+            # print("==================================================================")
             # print("stage_id:", stage_id)
             # Get the image features for the current frames
             # img_ids = input.find_inputs[stage_id].img_ids
             img_ids = input.flat_obj_to_img_idx[stage_id]
 
             init_cond_frames_gt = None
-            if stage_id == 0 and self.use_gt_in_first_frame:
-                init_cond_frames_gt = self.get_gt_from_first_frame(input.gtdata, img_ids)
+            if (stage_id == 0 and self.use_gt_in_first_frame) or self.use_gt_in_all_frame:
+                init_cond_frames_gt = self.get_gt_from_img_ids_frame(input.gtdata, img_ids)
+                # print("img_ids init_cond_frames_gt:", img_ids)
+
 
             if img_feats_already_computed:
                 # Retrieve image features according to img_ids (if they are already computed).
@@ -456,10 +513,15 @@ class YOLOMTrain(YOLOMBase):
             #     self.add_all_frames_to_correct_as_cond
             #     and stage_id in frames_to_add_correction_pt
             # )
-            if add_output_as_cond_frame:
-                output_dict["cond_frame_outputs"][stage_id] = current_out
+
+            if self.use_gt_in_all_frame:
+                output_dict["cond_frame_outputs"][0] = current_out
+                # print("output_dict[cond_frame_outputs][0]:", output_dict["cond_frame_outputs"][0])
             else:
-                output_dict["non_cond_frame_outputs"][stage_id] = current_out
+                if add_output_as_cond_frame:
+                    output_dict["cond_frame_outputs"][stage_id] = current_out
+                else:
+                    output_dict["non_cond_frame_outputs"][stage_id] = current_out
 
             # for i_cur in range(len(yolo_outputs)):
             #     print(f"yolo_outputs[{i_cur}]: {yolo_outputs[i_cur].shape}")
@@ -492,6 +554,19 @@ class YOLOMTrain(YOLOMBase):
         #     {k: v for k, v in d.items() if k != "obj_ptr"} for d in all_frame_outputs
         # ]
         # sys.exit()
+        # print("before input.gtdata:", input.gtdata)
+        if self.skip_first_frame:
+            input.gtdata = self.skip_first_frame_gtdata_0(input.gtdata)
+            # print("Before:")
+            # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
+            # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
+
+            # 執行過濾
+            all_frame_outputs = self.remove_batch_0(all_frame_outputs)
+
+            # print("\nAfter:")
+            # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
+            # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
 
         return all_frame_outputs
 

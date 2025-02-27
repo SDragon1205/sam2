@@ -1,12 +1,16 @@
 # @package _global_
 
 scratch:
-  init_cond_frames_mode: 2
+  init_cond_frames_mode: 1
+  use_gt_in_all_frame: True
+  memory_before_neck: False
+  mask_for_mem_sigmoid: False
+  use_gt_in_first_frame: True
   skip_first_frame: True
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
-  train_num_frames: 10
+  train_num_frames: 7
   val_num_frames: 10
   max_num_objects: 3
   base_lr: 5.0e-6
@@ -171,7 +175,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: val #val # train_only
+  mode: train_only #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -209,6 +213,9 @@ trainer:
         normalize: true
         scale: null
         temperature: 10000
+      has_output_upscaling: True
+      transformer_dim: 512
+      norm_type: group
 
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
@@ -272,7 +279,7 @@ trainer:
           num_layers: 2
         in_dim: 512
 
-    num_maskmem: 7
+    num_maskmem: 1
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -333,7 +340,11 @@ trainer:
     # detect_ch: ${scratch.ch}
     # detect_stride: ${scratch.stride}
     init_cond_frames_mode: ${scratch.init_cond_frames_mode}
+    mask_for_mem_sigmoid: ${scratch.mask_for_mem_sigmoid}
+    use_gt_in_first_frame: ${scratch.use_gt_in_first_frame}
     skip_first_frame: ${scratch.skip_first_frame}
+    memory_before_neck: ${scratch.memory_before_neck}
+    use_gt_in_all_frame: ${scratch.use_gt_in_all_frame}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -530,7 +541,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_output_upscaling.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

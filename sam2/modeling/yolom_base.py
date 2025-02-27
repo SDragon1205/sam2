@@ -103,8 +103,11 @@ class YOLOMBase(torch.nn.Module):
         detect_stride = [ 8., 16., 32.],
         hidden_dim=512,
         init_cond_frames_mode=0,
-        mask_for_mem_sigmoid=False,
-        use_gt_in_first_frame=False,
+        mask_for_mem_sigmoid: bool = False,
+        zero_in_bd: bool = False,
+        use_gt_in_first_frame: bool = False,
+        memory_before_neck: bool = True,
+        use_gt_in_all_frame: bool = False,
     ):
         super().__init__()
 
@@ -211,7 +214,10 @@ class YOLOMBase(torch.nn.Module):
         #         dynamic=False,
         #     )
         self.mask_for_mem_sigmoid = mask_for_mem_sigmoid
-        self.use_gt_in_first_frame=use_gt_in_first_frame
+        self.zero_in_bd = zero_in_bd
+        self.use_gt_in_first_frame = use_gt_in_first_frame
+        self.memory_before_neck = memory_before_neck
+        self.use_gt_in_all_frame = use_gt_in_all_frame
 
     @property
     def device(self):
@@ -468,7 +474,10 @@ class YOLOMBase(torch.nn.Module):
         #     image_embeddings=backbone_features,
         #     high_res_features=high_res_features,
         # )
-        x_preds = self.yolo.forward_neck_head(backbone_features)
+        if self.memory_before_neck:
+            x_preds = self.yolo.forward_neck_head(backbone_features)
+        else:
+            x_preds = self.yolo.forward_head(backbone_features)
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
         # sys.exit()
@@ -542,7 +551,10 @@ class YOLOMBase(torch.nn.Module):
         """Get the image feature on the input batch."""
         # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
-        backbone_out = self.yolo.forward_backbone(img_batch)
+        if self.memory_before_neck:
+            backbone_out = self.yolo.forward_backbone(img_batch)
+        else:
+            backbone_out = self.yolo.forward_backbone_neck(img_batch)
         # gt_yolo_out = self.freeze_model.model._predict_once(img_batch)
         # print("gt_yolo_out[0]:", gt_yolo_out[0].shape)
         # print("gt_yolo_out[1]:", gt_yolo_out[1][0].shape, gt_yolo_out[1][1].shape, gt_yolo_out[1][2].shape)
@@ -951,7 +963,15 @@ class YOLOMBase(torch.nn.Module):
         #     print(f"new_preds[{i_preds}]:", preds[i_preds].shape)
         for pred in preds:
             assert len(pred) != 0, f"_get_high_res_masks_from_yolo_outputs get 0 pred"
-        high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)#.clone()
+        if self.zero_in_bd:
+            high_res_masks = torch.zeros((len(preds), self.detect_nc, self.image_size, self.image_size), device=preds[0].device)#.clone()
+        else:
+            high_res_masks = torch.full(
+                (len(preds), self.detect_nc, self.image_size, self.image_size), 
+                1e-12,  # 可根據需求調整極小值
+                device=preds[0].device
+            )
+
         for idx, pred in enumerate(preds):
             for box in pred:
                 x1, y1, x2, y2, conf, cls = box
@@ -995,7 +1015,15 @@ class YOLOMBase(torch.nn.Module):
         bboxes_filtered = bboxes_filtered.to(device)
 
         # 初始化高解析度 masks
-        high_res_masks = torch.zeros((len(img_ids), self.detect_nc, self.image_size, self.image_size), device=device)
+        if self.zero_in_bd:
+            high_res_masks = torch.zeros((len(img_ids), self.detect_nc, self.image_size, self.image_size), device=device)
+        else:
+            high_res_masks = torch.full(
+                (len(img_ids), self.detect_nc, self.image_size, self.image_size), 
+                1e-12,  # 可根據需求調整極小值
+                device=device
+            )
+
 
         for i_batch, img_id in enumerate(img_ids):
             # 取得當前 img_id 對應的 batch_idx 的 mask
