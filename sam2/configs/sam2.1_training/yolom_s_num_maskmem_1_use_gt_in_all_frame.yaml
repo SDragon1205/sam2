@@ -62,8 +62,15 @@ sav_dataset_train:
 
 sav_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_10/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_10/annotations/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+
+sav_dataset_test:
+  # PATHS to Dataset
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_10/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_10/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
@@ -175,7 +182,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: train_only #val # train_only
+  mode: val #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -390,7 +397,7 @@ trainer:
         sampler:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
           num_frames: ${scratch.train_num_frames} # Number of frames per video
-          reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+          reverse_time_prob: 0 # probability to reverse video
         transforms: ${vos_train.train_transforms}
         multiplier: ${sav_dataset_train.multiplier}
       shuffle: True
@@ -420,23 +427,44 @@ trainer:
       #   sampler:
       #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
       #     num_frames: 1
+      #     val: True
       #   transforms: ${vos_val.train_transforms}
       #   multiplier: ${sa1b_dataset_val.multiplier}
-      # SA-V as an example of a video dataset
+
+      # val
+      # # SA-V as an example of a video dataset
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: true
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset_val.img_folder}
+      #     gt_folder: ${sav_dataset_val.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.val_num_frames} # Number of frames per video
+      #     reverse_time_prob: 0 # probability to reverse video
+      #     val: True
+      #   transforms: ${vos_val.train_transforms}
+      #   multiplier: ${sav_dataset_val.multiplier}
+
+      # test sav_dataset_test
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: true
         video_dataset:
           _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_val.img_folder}
-          gt_folder: ${sav_dataset_val.gt_folder}
+          img_folder: ${sav_dataset_test.img_folder}
+          gt_folder: ${sav_dataset_test.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
           # ann_every: 4
         sampler:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
           num_frames: ${scratch.val_num_frames} # Number of frames per video
-          reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+          reverse_time_prob: 0 # probability to reverse video
+          val: True
         transforms: ${vos_val.train_transforms}
-        multiplier: ${sav_dataset_val.multiplier}
+        multiplier: ${sav_dataset_test.multiplier}
       shuffle: False
       num_workers: ${scratch.num_train_workers}
       pin_memory: True

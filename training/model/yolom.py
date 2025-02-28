@@ -517,6 +517,9 @@ class YOLOMTrain(YOLOMBase):
             if self.use_gt_in_all_frame:
                 output_dict["cond_frame_outputs"][0] = current_out
                 # print("output_dict[cond_frame_outputs][0]:", output_dict["cond_frame_outputs"][0])
+            elif not self.has_cond_frame_outputs:
+                output_dict["non_cond_frame_outputs"][stage_id] = current_out
+                # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id])
             else:
                 if add_output_as_cond_frame:
                     output_dict["cond_frame_outputs"][stage_id] = current_out

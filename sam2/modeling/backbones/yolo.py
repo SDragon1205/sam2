@@ -20,6 +20,7 @@ class yolo(nn.Module):
         super().__init__()
         self.detection_model = DetectionModel(cfg=cfg, ch=3, nc=nc, verbose=True)
         self.position_encoding = position_encoding
+        self.has_output_upscaling = has_output_upscaling
         if has_output_upscaling:
             if norm_type == "group":
                 self.output_upscaling = nn.Sequential(
@@ -166,14 +167,17 @@ class yolo(nn.Module):
     
     def forward_head(self, x_list):
         # print("x_list.shape:", x_list[0].shape, x_list[1].shape, x_list[2].shape)
-        dc1, ln1, act1, dc2, act2 = self.output_upscaling
-        # x_list_2 = x_list[2].clone()
-        upscaled_embedding1 = act1(ln1(dc1(x_list[2]) + x_list[1]))
-        upscaled_embedding2 = act2(dc2(upscaled_embedding1) + x_list[0])
-        # print("is x_list_2 same", x_list_2 == x_list[2])
         m = self.detection_model.model[22]
-        # print("input shape:", upscaled_embedding2.shape, upscaled_embedding1.shape, x_list[2].shape)
-        output = m([upscaled_embedding2, upscaled_embedding1, x_list[2]])
+        if self.has_output_upscaling:
+            dc1, ln1, act1, dc2, act2 = self.output_upscaling
+            # x_list_2 = x_list[2].clone()
+            upscaled_embedding1 = act1(ln1(dc1(x_list[2]) + x_list[1]))
+            upscaled_embedding2 = act2(dc2(upscaled_embedding1) + x_list[0])
+            # print("is x_list_2 same", x_list_2 == x_list[2])
+            # print("input shape:", upscaled_embedding2.shape, upscaled_embedding1.shape, x_list[2].shape)
+            output = m([upscaled_embedding2, upscaled_embedding1, x_list[2]])
+        else:
+            output = m(x_list)
         # print("output.shape:", output[0].shape, output[1].shape, output[2].shape)
         # sys.exit()
         return output

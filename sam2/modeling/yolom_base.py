@@ -108,6 +108,9 @@ class YOLOMBase(torch.nn.Module):
         use_gt_in_first_frame: bool = False,
         memory_before_neck: bool = True,
         use_gt_in_all_frame: bool = False,
+        has_cond_frame_outputs: bool = True,
+        memory_position: int = 2,
+        use_origin_yolo_outputs_encode: bool = False,
     ):
         super().__init__()
 
@@ -218,6 +221,9 @@ class YOLOMBase(torch.nn.Module):
         self.use_gt_in_first_frame = use_gt_in_first_frame
         self.memory_before_neck = memory_before_neck
         self.use_gt_in_all_frame = use_gt_in_all_frame
+        self.has_cond_frame_outputs = has_cond_frame_outputs
+        self.memory_position = memory_position
+        self.use_origin_yolo_outputs_encode = use_origin_yolo_outputs_encode
 
     @property
     def device(self):
@@ -445,7 +451,7 @@ class YOLOMBase(torch.nn.Module):
     #         obj_ptr,
     #         object_score_logits,
     #     )
-    def _forward_yolo_neck_heads(
+    def _forward_yolo_back(
         self,
         backbone_features,
         # high_res_features,
@@ -610,14 +616,19 @@ class YOLOMBase(torch.nn.Module):
             to_cat_memory, to_cat_memory_pos_embed = [], []
             # Add conditioning frames's output first (all cond frames have t_pos=0 for
             # when getting temporal positional embedding below)
-            assert len(output_dict["cond_frame_outputs"]) > 0
+            if self.has_cond_frame_outputs:
+                assert len(output_dict["cond_frame_outputs"]) > 0
             # Select a maximum number of temporally closest cond frames for cross attention
             cond_outputs = output_dict["cond_frame_outputs"]
             # print("self.max_cond_frames_in_attn:", self.max_cond_frames_in_attn)
             selected_cond_outputs, unselected_cond_outputs = select_closest_cond_frames(
                 frame_idx, cond_outputs, self.max_cond_frames_in_attn
             )
-            t_pos_and_prevs = [(0, out) for out in selected_cond_outputs.values()]
+
+            if self.has_cond_frame_outputs:
+                t_pos_and_prevs = [(0, out) for out in selected_cond_outputs.values()]
+            else:
+                t_pos_and_prevs = []
             # print("0 t_pos_and_prevs:", t_pos_and_prevs)
             # print("len(selected_cond_outputs.values()):", len(selected_cond_outputs.values()))
             # Add last (self.num_maskmem - 1) frames before current frame for non-conditioning memory
@@ -625,7 +636,11 @@ class YOLOMBase(torch.nn.Module):
             # We also allow taking the memory frame non-consecutively (with stride>1), in which case
             # we take (self.num_maskmem - 2) frames among every stride-th frames plus the last frame.
             stride = 1 if self.training else self.memory_temporal_stride_for_eval
-            for t_pos in range(1, self.num_maskmem):
+            if self.has_cond_frame_outputs:
+                t_pos_range = range(1, self.num_maskmem)
+            else:
+                t_pos_range = range(0, self.num_maskmem)
+            for t_pos in t_pos_range:
                 t_rel = self.num_maskmem - t_pos  # how many frames before current frame
                 if t_rel == 1:
                     # for t_rel == 1, we take the last frame (regardless of r)
@@ -785,11 +800,19 @@ class YOLOMBase(torch.nn.Module):
         # is_mask_from_pts,
     ):
         """Encode the current image and its prediction into a memory feature."""
-        B = current_vision_feats[-1].size(1)  # batch size on this frame
+        # B = current_vision_feats[-1].size(1)  # batch size on this frame
+        # C = self.hidden_dim
+        # H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
+        B = current_vision_feats[self.memory_position].size(1)  # batch size on this frame
         C = self.hidden_dim
-        H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
+        H, W = feat_sizes[self.memory_position]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
-        pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
+        # print("B, C, H, W:", B, C, H, W)
+        # print("current_vision_feats[-1].shape:", current_vision_feats[-1].shape)
+        # print("feat_sizes:", feat_sizes)
+        # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
+        pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
+
         # if self.non_overlap_masks_for_mem_enc and not self.training:
         #     # optionally, apply non-overlapping constraints to the masks (it's applied
         #     # in the batch dimension and should only be used during eval, where all
@@ -805,11 +828,15 @@ class YOLOMBase(torch.nn.Module):
         #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
         #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
 
+        # print("pred_masks_high_res max min", torch.max(pred_masks_high_res), torch.min(pred_masks_high_res))
         if self.mask_for_mem_sigmoid:
             # print("mask_for_mem_sigmoid")
             mask_for_mem = torch.sigmoid(pred_masks_high_res)
         else:
             mask_for_mem = pred_masks_high_res
+        
+        if not self.zero_in_bd:
+            assert torch.all((mask_for_mem >= 0) & (mask_for_mem <= 1)), "mask_for_mem is out of range (0,1)"
 
         # apply scale and bias terms to the sigmoid probabilities
         if self.sigmoid_scale_for_mem_enc != 1.0:
@@ -854,14 +881,42 @@ class YOLOMBase(torch.nn.Module):
     ):
         # current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
+        # self.memory_position = 0
         # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[1].shape, current_vision_feats[2].shape)
-        if len(current_vision_feats) > 1:
-            high_res_features = [
-                x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
-                for x, s in zip(current_vision_feats[:-1], feat_sizes[:-1])
-            ]
-        else:
-            high_res_features = None
+        def get_high_res_features(current_vision_feats, feat_sizes, idx):
+            """
+            根據 idx 選擇 high_res_features，排除 current_vision_feats[idx]。
+            
+            :param current_vision_feats: List of feature maps
+            :param feat_sizes: List of corresponding sizes
+            :param idx: 要排除的索引
+            :return: high_res_features (List)
+            """
+            if len(current_vision_feats) > 1:
+                high_res_features = [
+                    x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
+                    for i, (x, s) in enumerate(zip(current_vision_feats, feat_sizes))
+                    if i != idx  # 過濾掉指定的 idx
+                ]
+            else:
+                high_res_features = None
+
+            return high_res_features
+        
+        # if len(current_vision_feats) > 1:
+        #     high_res_features = [
+        #         x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
+        #         for x, s in zip(current_vision_feats[:-1], feat_sizes[:-1])
+        #     ]
+        # else:
+        #     high_res_features = None
+        high_res_features = get_high_res_features(current_vision_feats, feat_sizes, self.memory_position)
+        # print("high_res_features[-1:]:", high_res_features[-1:].shape)
+        # print("current_vision_feats[-1:][0]:", current_vision_feats[-1:][0].shape)
+        # print("high_res_features[0]:", high_res_features[0].shape)
+        # print("high_res_features[1]:", high_res_features[1].shape)
+        # print("current_vision_feats[-1:] == [current_vision_feats[2]]:", current_vision_feats[-1:] == [current_vision_feats[2]])
+        # sys.exit()
         # if mask_inputs is not None and self.use_mask_input_as_output_without_sam:
         #     # When use_mask_input_as_output_without_sam=True, we directly output the mask input
         #     # (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
@@ -897,21 +952,41 @@ class YOLOMBase(torch.nn.Module):
         #         high_res_features=high_res_features,
         #         multimask_output=multimask_output,
         #     )
-        
+        if self.memory_position == 0: 
+            current_vision_feats_prepare=[current_vision_feats[0]]
+            current_vision_pos_embeds_prepare=[current_vision_pos_embeds[0]]
+            feat_sizes_prepare=[feat_sizes[0]]
+        elif self.memory_position == 1: 
+            current_vision_feats_prepare=[current_vision_feats[1]]
+            current_vision_pos_embeds_prepare=[current_vision_pos_embeds[1]]
+            feat_sizes_prepare=[feat_sizes[1]]
+        else:
+            current_vision_feats_prepare=current_vision_feats[-1:]
+            current_vision_pos_embeds_prepare=current_vision_pos_embeds[-1:]
+            feat_sizes_prepare=feat_sizes[-1:]
+        # print("current_vision_feats_prepare:", current_vision_feats_prepare[0].shape)
+        # print("current_vision_pos_embeds_prepare:", current_vision_pos_embeds_prepare[0].shape)
+        # print("feat_sizes_prepare:", feat_sizes_prepare[0])
+        # sys.exit()
+
         pix_feat = self._prepare_memory_conditioned_features(
             frame_idx=frame_idx,
             is_init_cond_frame=is_init_cond_frame,
-            current_vision_feats=current_vision_feats[-1:],
-            current_vision_pos_embeds=current_vision_pos_embeds[-1:],
-            feat_sizes=feat_sizes[-1:],
+            current_vision_feats=current_vision_feats_prepare,
+            current_vision_pos_embeds=current_vision_pos_embeds_prepare,
+            feat_sizes=feat_sizes_prepare,
             output_dict=output_dict,
             num_frames=num_frames,
             track_in_reverse=track_in_reverse,
         )
         # print("pix_feat:", pix_feat.shape)
         # print("high_res_features:", high_res_features[0].shape, high_res_features[1].shape)
-
-        yolo_outputs = self._forward_yolo_neck_heads([high_res_features[0], high_res_features[1], pix_feat])
+        if self.memory_position == 0: 
+            yolo_outputs = self._forward_yolo_back([pix_feat, high_res_features[0], high_res_features[1]])
+        elif self.memory_position == 1: 
+            yolo_outputs = self._forward_yolo_back([high_res_features[0], pix_feat, high_res_features[1]])
+        else:
+            yolo_outputs = self._forward_yolo_back([high_res_features[0], high_res_features[1], pix_feat])
         # print("yolo_outputs[0]:", yolo_outputs[0].shape)
         # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
         # sys.exit()
@@ -1054,6 +1129,9 @@ class YOLOMBase(torch.nn.Module):
             return high_res_masks
         return high_res_masks.requires_grad_(True)
     
+    def _use_origin_yolo_outputs_encode(self, yolo_outputs, idx):
+        return yolo_outputs[1][idx]
+    
     def _encode_memory_in_output(
         self,
         current_vision_feats,
@@ -1075,6 +1153,9 @@ class YOLOMBase(torch.nn.Module):
             if init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_gt(init_cond_frames_gt, img_ids, yolo_outputs[0].device)
                 # print("_get_high_res_masks_from_gt")
+            elif self.use_origin_yolo_outputs_encode:
+                high_res_masks_for_mem_enc = self._use_origin_yolo_outputs_encode(yolo_outputs, self.memory_position)
+                # print("high_res_masks_for_mem_enc:", high_res_masks_for_mem_enc.shape)
             else:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(

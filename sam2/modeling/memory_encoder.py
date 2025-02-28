@@ -32,29 +32,32 @@ class MaskDownSampler(nn.Module):
         total_stride=16,
         activation=nn.GELU,
         in_chans=1,
+        has_mask_down=True,
     ):
         super().__init__()
-        num_layers = int(math.log2(total_stride) // math.log2(stride))
-        assert stride**num_layers == total_stride
         self.encoder = nn.Sequential()
-        # mask_in_chans, mask_out_chans = 1, 1
-        mask_in_chans, mask_out_chans = in_chans, in_chans
-        for _ in range(num_layers):
-            mask_out_chans = mask_in_chans * (stride**2)
-            self.encoder.append(
-                nn.Conv2d(
-                    mask_in_chans,
-                    mask_out_chans,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding=padding,
+        if has_mask_down:
+            num_layers = int(math.log2(total_stride) // math.log2(stride))
+            assert stride**num_layers == total_stride
+            # self.encoder = nn.Sequential()
+            # mask_in_chans, mask_out_chans = 1, 1
+            mask_in_chans, mask_out_chans = in_chans, in_chans
+            for _ in range(num_layers):
+                mask_out_chans = mask_in_chans * (stride**2)
+                self.encoder.append(
+                    nn.Conv2d(
+                        mask_in_chans,
+                        mask_out_chans,
+                        kernel_size=kernel_size,
+                        stride=stride,
+                        padding=padding,
+                    )
                 )
-            )
-            self.encoder.append(LayerNorm2d(mask_out_chans))
-            self.encoder.append(activation())
-            mask_in_chans = mask_out_chans
+                self.encoder.append(LayerNorm2d(mask_out_chans))
+                self.encoder.append(activation())
+                mask_in_chans = mask_out_chans
 
-        self.encoder.append(nn.Conv2d(mask_out_chans, embed_dim, kernel_size=1))
+        self.encoder.append(nn.Conv2d(in_chans, embed_dim, kernel_size=1))
 
     def forward(self, x):
         # print("MaskDownSampler x:", x.shape)
@@ -170,6 +173,7 @@ class MemoryEncoder(nn.Module):
         if not skip_mask_sigmoid:
             masks = F.sigmoid(masks)
         masks = self.mask_downsampler(masks)
+        # print("masks:", masks.shape)
 
         ## Fuse pix_feats and downsampled masks
         # in case the visual features are on CPU, cast them to CUDA

@@ -649,6 +649,7 @@ class Trainer_yolo:
 
     def run(self):
         assert self.mode in ["train", "train_only", "val"]
+        self.val_best_map50 = 0
         if self.mode == "train":
             if self.epoch > 0:
                 logging.info(f"Resuming training from epoch: {self.epoch}")
@@ -861,12 +862,16 @@ class Trainer_yolo:
         self.validator.finalize_metrics()
         # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
         seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
-        # self.logger.log("Metrics/Images", seen, self.epoch)
-        # self.logger.log("Metrics/Instances", nt_per_class, self.epoch)
-        # self.logger.log("Metrics/Precision", result0, self.epoch)
-        # self.logger.log("Metrics/Recall", result1, self.epoch)
-        # self.logger.log("Metrics/mAP50", result2, self.epoch)
-        # self.logger.log("Metrics/mAP50-95", result3, self.epoch)
+        if self.mode == "train":
+            self.logger.log(f"Metrics/val_Images", seen, self.epoch)
+            self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
+            self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
+            self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
+            self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
+            self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
+            if result2 > self.val_best_map50:
+                self.save_checkpoint(self.epoch + 1, ["best"])
+                self.val_best_map50 = result2
 
         return out_dict
 
@@ -1021,12 +1026,12 @@ class Trainer_yolo:
         self.validator.check_stats(stats)
         self.validator.finalize_metrics()
         seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
-        self.logger.log(f"Metrics/{phase}_Images", seen, self.epoch)
-        self.logger.log(f"Metrics/{phase}_Instances", nt_per_class, self.epoch)
-        self.logger.log(f"Metrics/{phase}_Precision", result0, self.epoch)
-        self.logger.log(f"Metrics/{phase}_Recall", result1, self.epoch)
-        self.logger.log(f"Metrics/{phase}_mAP50", result2, self.epoch)
-        self.logger.log(f"Metrics/{phase}_mAP50-95", result3, self.epoch)
+        self.logger.log(f"Metrics/train_Images", seen, self.epoch)
+        self.logger.log(f"Metrics/train_Instances", nt_per_class, self.epoch)
+        self.logger.log(f"Metrics/train_Precision", result0, self.epoch)
+        self.logger.log(f"Metrics/train_Recall", result1, self.epoch)
+        self.logger.log(f"Metrics/train_mAP50", result2, self.epoch)
+        self.logger.log(f"Metrics/train_mAP50-95", result3, self.epoch)
 
         return out_dict
 
