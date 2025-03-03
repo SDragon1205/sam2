@@ -56,8 +56,9 @@ class MaskDownSampler(nn.Module):
                 self.encoder.append(LayerNorm2d(mask_out_chans))
                 self.encoder.append(activation())
                 mask_in_chans = mask_out_chans
-
-        self.encoder.append(nn.Conv2d(in_chans, embed_dim, kernel_size=1))
+            self.encoder.append(nn.Conv2d(mask_in_chans, embed_dim, kernel_size=1))
+        else:
+            self.encoder.append(nn.Conv2d(in_chans, embed_dim, kernel_size=1))
 
     def forward(self, x):
         # print("MaskDownSampler x:", x.shape)
@@ -158,7 +159,7 @@ class MemoryEncoder(nn.Module):
         self.no_mask_downsampler = no_mask_downsampler
         self.position_encoding = position_encoding
 
-        if not self.only_pos or not self.no_mask_downsampler:
+        if not self.only_pos and not self.no_mask_downsampler:
             self.mask_downsampler = mask_downsampler
 
         if not self.only_pos:
@@ -188,22 +189,22 @@ class MemoryEncoder(nn.Module):
         if not skip_mask_sigmoid:
             masks = F.sigmoid(masks)
         masks = self.mask_downsampler(masks)
-        print("masks:", masks.shape)
+        # print("masks:", masks.shape)
 
         ## Fuse pix_feats and downsampled masks
         # in case the visual features are on CPU, cast them to CUDA
         pix_feat = pix_feat.to(masks.device)
-        print("pix_feat:", pix_feat.shape)
+        # print("pix_feat:", pix_feat.shape)
         x = self.pix_feat_proj(pix_feat)
-        print("pix_feat_proj:", x.shape)
+        # print("pix_feat_proj:", x.shape)
         x = x + masks
         x = self.fuser(x)
-        print("fuser:", x.shape)
+        # print("fuser:", x.shape)
         x = self.out_proj(x)
-        print("out_proj:", x.shape)
+        # print("out_proj:", x.shape)
 
         pos = self.position_encoding(x).to(x.dtype)
         # print("x:", x.shape)
         # print("pos:", pos.shape)
-        sys.exit()
+        # sys.exit()
         return {"vision_features": x, "vision_pos_enc": [pos]}
