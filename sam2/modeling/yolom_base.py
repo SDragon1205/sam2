@@ -111,6 +111,7 @@ class YOLOMBase(torch.nn.Module):
         has_cond_frame_outputs: bool = True,
         memory_position: int = 2,
         use_origin_yolo_outputs_encode: bool = False,
+        self_memory_encode: bool = False,
     ):
         super().__init__()
 
@@ -224,6 +225,7 @@ class YOLOMBase(torch.nn.Module):
         self.has_cond_frame_outputs = has_cond_frame_outputs
         self.memory_position = memory_position
         self.use_origin_yolo_outputs_encode = use_origin_yolo_outputs_encode
+        self.self_memory_encode = self_memory_encode
 
     @property
     def device(self):
@@ -672,6 +674,8 @@ class YOLOMBase(torch.nn.Module):
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
                 t_pos_and_prevs.append((t_pos, out))
+                # print("out['maskmem_features']:", out['maskmem_features'][0].shape)
+                # print("out['maskmem_pos_enc']:", out['maskmem_pos_enc'][0].shape)
             # print("t_pos_and_prevs:", t_pos_and_prevs)
 
             for t_pos, prev in t_pos_and_prevs:
@@ -827,30 +831,33 @@ class YOLOMBase(torch.nn.Module):
         # else:
         #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
         #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
-
-        # print("pred_masks_high_res max min", torch.max(pred_masks_high_res), torch.min(pred_masks_high_res))
-        if self.mask_for_mem_sigmoid:
-            # print("mask_for_mem_sigmoid")
-            mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        if self.self_memory_encode:
+            mask_for_mem = torch.tensor([0])
         else:
-            mask_for_mem = pred_masks_high_res
-        
-        if not self.zero_in_bd:
-            assert torch.all((mask_for_mem >= 0) & (mask_for_mem <= 1)), "mask_for_mem is out of range (0,1)"
+            # print("pred_masks_high_res max min", torch.max(pred_masks_high_res), torch.min(pred_masks_high_res))
+            if self.mask_for_mem_sigmoid:
+                # print("mask_for_mem_sigmoid")
+                mask_for_mem = torch.sigmoid(pred_masks_high_res)
+            else:
+                mask_for_mem = pred_masks_high_res
+            
+            if not self.zero_in_bd:
+                assert torch.all((mask_for_mem >= 0) & (mask_for_mem <= 1)), "mask_for_mem is out of range (0,1)"
 
-        # apply scale and bias terms to the sigmoid probabilities
-        if self.sigmoid_scale_for_mem_enc != 1.0:
-            mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
-        if self.sigmoid_bias_for_mem_enc != 0.0:
-            mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
-        # print("pix_feat:", pix_feat.shape)
-        # print("mask_for_mem:", mask_for_mem.shape)
-        # sys.exit()
+            # apply scale and bias terms to the sigmoid probabilities
+            if self.sigmoid_scale_for_mem_enc != 1.0:
+                mask_for_mem = mask_for_mem * self.sigmoid_scale_for_mem_enc
+            if self.sigmoid_bias_for_mem_enc != 0.0:
+                mask_for_mem = mask_for_mem + self.sigmoid_bias_for_mem_enc
+            # print("pix_feat:", pix_feat.shape)
+            # print("mask_for_mem:", mask_for_mem.shape)
+            # sys.exit()
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
         maskmem_features = maskmem_out["vision_features"]
         maskmem_pos_enc = maskmem_out["vision_pos_enc"]
+        # print("torch.equal(maskmem_features, pix_feat)", torch.equal(maskmem_features, pix_feat))
         # # add a no-object embedding to the spatial memory to indicate that the frame
         # # is predicted to be occluded (i.e. no object is appearing in the frame)
         # if self.no_obj_embed_spatial is not None:
@@ -1150,7 +1157,9 @@ class YOLOMBase(torch.nn.Module):
             #     high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
             # else:
             # print("yolo_outputs[0].device:", yolo_outputs[0].device)
-            if init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
+            if self.self_memory_encode:
+                high_res_masks_for_mem_enc = None
+            elif init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_gt(init_cond_frames_gt, img_ids, yolo_outputs[0].device)
                 # print("_get_high_res_masks_from_gt")
             elif self.use_origin_yolo_outputs_encode:

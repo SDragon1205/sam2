@@ -150,17 +150,23 @@ class MemoryEncoder(nn.Module):
         fuser,
         position_encoding,
         in_dim=256,  # in_dim of pix_feats
+        only_pos: bool = False,
+        no_mask_downsampler: bool = False,
     ):
         super().__init__()
-
-        self.mask_downsampler = mask_downsampler
-
-        self.pix_feat_proj = nn.Conv2d(in_dim, in_dim, kernel_size=1)
-        self.fuser = fuser
+        self.only_pos = only_pos
+        self.no_mask_downsampler = no_mask_downsampler
         self.position_encoding = position_encoding
-        self.out_proj = nn.Identity()
-        if out_dim != in_dim:
-            self.out_proj = nn.Conv2d(in_dim, out_dim, kernel_size=1)
+
+        if not self.only_pos or not self.no_mask_downsampler:
+            self.mask_downsampler = mask_downsampler
+
+        if not self.only_pos:
+            self.pix_feat_proj = nn.Conv2d(in_dim, in_dim, kernel_size=1)
+            self.fuser = fuser
+            self.out_proj = nn.Identity()
+            if out_dim != in_dim:
+                self.out_proj = nn.Conv2d(in_dim, out_dim, kernel_size=1)
 
     def forward(
         self,
@@ -168,24 +174,36 @@ class MemoryEncoder(nn.Module):
         masks: torch.Tensor,
         skip_mask_sigmoid: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.only_pos:
+            pos = self.position_encoding(pix_feat).to(pix_feat.dtype)
+            return {"vision_features": pix_feat, "vision_pos_enc": [pos]}
+        if self.no_mask_downsampler:
+            x = self.pix_feat_proj(pix_feat)
+            x = self.fuser(x)
+            x = self.out_proj(x)
+            pos = self.position_encoding(x).to(x.dtype)
+            return {"vision_features": x, "vision_pos_enc": [pos]}
         ## Process masks
         # sigmoid, so that less domain shift from gt masks which are bool
         if not skip_mask_sigmoid:
             masks = F.sigmoid(masks)
         masks = self.mask_downsampler(masks)
-        # print("masks:", masks.shape)
+        print("masks:", masks.shape)
 
         ## Fuse pix_feats and downsampled masks
         # in case the visual features are on CPU, cast them to CUDA
         pix_feat = pix_feat.to(masks.device)
-
+        print("pix_feat:", pix_feat.shape)
         x = self.pix_feat_proj(pix_feat)
+        print("pix_feat_proj:", x.shape)
         x = x + masks
         x = self.fuser(x)
+        print("fuser:", x.shape)
         x = self.out_proj(x)
+        print("out_proj:", x.shape)
 
         pos = self.position_encoding(x).to(x.dtype)
         # print("x:", x.shape)
         # print("pos:", pos.shape)
-        # sys.exit()
+        sys.exit()
         return {"vision_features": x, "vision_pos_enc": [pos]}

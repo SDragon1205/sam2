@@ -1,22 +1,28 @@
 # @package _global_
 
 scratch:
+  mode: train #val #train # train_only
   init_cond_frames_mode: 1
-  use_gt_in_all_frame: True
+  self_memory_encode: True
+  use_origin_yolo_outputs_encode: False
+  memory_position: 0
+  has_cond_frame_outputs: False
+
+  use_gt_in_all_frame: False
   memory_before_neck: False
   mask_for_mem_sigmoid: False
-  use_gt_in_first_frame: True
+  use_gt_in_first_frame: False
   skip_first_frame: True
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
-  train_num_frames: 7
+  train_num_frames: 11
   val_num_frames: 10
   max_num_objects: 3
   base_lr: 5.0e-6
   vision_lr: 3.0e-06
   phases_per_epoch: 1
-  num_epochs: 80
+  num_epochs: 150
   reverse_time_prob: 0.5
   nc: 10
   ch: [128, 256, 512]
@@ -182,7 +188,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: val #val # train_only
+  mode: ${scratch.mode} #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -216,17 +222,16 @@ trainer:
       nc: ${scratch.nc}
       position_encoding:
         _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-        num_pos_feats: 512
+        num_pos_feats: 128
         normalize: true
         scale: null
         temperature: 10000
-      has_output_upscaling: True
-      transformer_dim: 512
+      has_output_upscaling: False
       norm_type: group
 
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
-      d_model: 512
+      d_model: 128
       pos_enc_at_input: true
       layer:
         _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
@@ -237,54 +242,55 @@ trainer:
         self_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [20, 20]
-          embedding_dim: 512
+          feat_sizes: [80, 80]
+          embedding_dim: 128
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-        d_model: 512
+        d_model: 128
         pos_enc_at_cross_attn_keys: true
         pos_enc_at_cross_attn_queries: false
         cross_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [20, 20]
+          feat_sizes: [80, 80]
           rope_k_repeat: True
-          embedding_dim: 512
+          embedding_dim: 128
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-          kv_in_dim: 64
+          kv_in_dim: 128
       num_layers: 4
 
     memory_encoder:
         _target_: sam2.modeling.memory_encoder.MemoryEncoder
-        out_dim: 64
+        out_dim: 128
         position_encoding:
           _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-          num_pos_feats: 64
+          num_pos_feats: 128
           normalize: true
           scale: null
           temperature: 10000
+        # ignore
+        ########################################################
         mask_downsampler:
           _target_: sam2.modeling.memory_encoder.MaskDownSampler
-          embed_dim: 512
-          kernel_size: 3
-          stride: 2
-          padding: 1
-          total_stride: 32
-          in_chans: ${scratch.nc}
+          embed_dim: 128
+          in_chans: 74
+          has_mask_down: False
+        ########################################################
         fuser:
           _target_: sam2.modeling.memory_encoder.Fuser
           layer:
             _target_: sam2.modeling.memory_encoder.CXBlock
-            dim: 512
+            dim: 128
             kernel_size: 7
             padding: 3
             layer_scale_init_value: 1e-6
             use_dwconv: True  # depth-wise convs
           num_layers: 2
-        in_dim: 512
+        in_dim: 128
+        no_mask_downsampler: True
 
     num_maskmem: 1
     image_size: ${scratch.resolution}
@@ -342,7 +348,7 @@ trainer:
     num_init_cond_frames_for_eval: 1  # only mask on the first frame
     forward_backbone_per_frame_for_eval: True
 
-    hidden_dim: 512
+    hidden_dim: 128
     # detect_nc: ${scratch.nc}
     # detect_ch: ${scratch.ch}
     # detect_stride: ${scratch.stride}
@@ -352,6 +358,10 @@ trainer:
     skip_first_frame: ${scratch.skip_first_frame}
     memory_before_neck: ${scratch.memory_before_neck}
     use_gt_in_all_frame: ${scratch.use_gt_in_all_frame}
+    has_cond_frame_outputs: ${scratch.has_cond_frame_outputs}
+    memory_position: ${scratch.memory_position}
+    use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
+    self_memory_encode: ${scratch.self_memory_encode}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -569,7 +579,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_output_upscaling.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:
