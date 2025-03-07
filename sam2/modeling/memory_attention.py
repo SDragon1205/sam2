@@ -27,6 +27,7 @@ class MemoryAttentionLayer(nn.Module):
         pos_enc_at_cross_attn_keys: bool,
         pos_enc_at_cross_attn_queries: bool,
         self_attention: nn.Module,
+        only_sa: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -55,6 +56,7 @@ class MemoryAttentionLayer(nn.Module):
         self.pos_enc_at_cross_attn_queries = pos_enc_at_cross_attn_queries
         self.pos_enc_at_cross_attn_keys = pos_enc_at_cross_attn_keys
 
+        self.only_sa = only_sa
     def _forward_sa(self, tgt, query_pos):
         # Self-Attention
         tgt2 = self.norm1(tgt)
@@ -91,7 +93,8 @@ class MemoryAttentionLayer(nn.Module):
 
         # Self-Attn, Cross-Attn
         tgt = self._forward_sa(tgt, query_pos)
-        tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
+        if not self.only_sa:
+            tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
         # MLP
         tgt2 = self.norm3(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))

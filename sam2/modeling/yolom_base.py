@@ -112,6 +112,7 @@ class YOLOMBase(torch.nn.Module):
         memory_position: int = 2,
         use_origin_yolo_outputs_encode: bool = False,
         self_memory_encode: bool = False,
+        recursive_memory: bool = False,
     ):
         super().__init__()
 
@@ -226,6 +227,7 @@ class YOLOMBase(torch.nn.Module):
         self.memory_position = memory_position
         self.use_origin_yolo_outputs_encode = use_origin_yolo_outputs_encode
         self.self_memory_encode = self_memory_encode
+        self.recursive_memory = recursive_memory
 
     @property
     def device(self):
@@ -986,6 +988,7 @@ class YOLOMBase(torch.nn.Module):
             num_frames=num_frames,
             track_in_reverse=track_in_reverse,
         )
+        # pix_feat_clone = pix_feat.clone()
         # print("pix_feat:", pix_feat.shape)
         # print("high_res_features:", high_res_features[0].shape, high_res_features[1].shape)
         if self.memory_position == 0: 
@@ -996,6 +999,7 @@ class YOLOMBase(torch.nn.Module):
             yolo_outputs = self._forward_yolo_back([high_res_features[0], high_res_features[1], pix_feat])
         # print("yolo_outputs[0]:", yolo_outputs[0].shape)
         # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
+        # print("torch.equal(pix_feat, pix_feat_clone):", torch.equal(pix_feat, pix_feat_clone))
         # sys.exit()
         return yolo_outputs, high_res_features, pix_feat
 
@@ -1151,6 +1155,7 @@ class YOLOMBase(torch.nn.Module):
         yolo_outputs,
         img_ids,
         init_cond_frames_gt,
+        recursive_pix_feat,
     ):
         if run_mem_encoder and self.num_maskmem > 0:
             # if self.use_freeze_model:
@@ -1167,13 +1172,23 @@ class YOLOMBase(torch.nn.Module):
                 # print("high_res_masks_for_mem_enc:", high_res_masks_for_mem_enc.shape)
             else:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
-            maskmem_features, maskmem_pos_enc = self._encode_new_memory(
-                current_vision_feats=current_vision_feats,
-                feat_sizes=feat_sizes,
-                pred_masks_high_res=high_res_masks_for_mem_enc,
-                # object_score_logits=object_score_logits,
-                # is_mask_from_pts=(point_inputs is not None),
-            )
+            
+            if self.recursive_memory:
+                maskmem_features, maskmem_pos_enc = self._encode_new_memory(
+                    current_vision_feats=recursive_pix_feat,
+                    feat_sizes=feat_sizes,
+                    pred_masks_high_res=high_res_masks_for_mem_enc,
+                    # object_score_logits=object_score_logits,
+                    # is_mask_from_pts=(point_inputs is not None),
+                )
+            else:
+                maskmem_features, maskmem_pos_enc = self._encode_new_memory(
+                    current_vision_feats=current_vision_feats,
+                    feat_sizes=feat_sizes,
+                    pred_masks_high_res=high_res_masks_for_mem_enc,
+                    # object_score_logits=object_score_logits,
+                    # is_mask_from_pts=(point_inputs is not None),
+                )
             # current_out["maskmem_features"] = maskmem_features
             # current_out["maskmem_pos_enc"] = maskmem_pos_enc
             current_out = {"maskmem_features": maskmem_features, "maskmem_pos_enc": maskmem_pos_enc}

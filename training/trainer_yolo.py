@@ -699,7 +699,8 @@ class Trainer_yolo:
                     f.write(json.dumps(outs) + "\n")
 
             # Save checkpoint before validating
-            self.save_checkpoint(self.epoch + 1)
+            # self.save_checkpoint(self.epoch + 1)
+            self.save_checkpoint(self.epoch + 1, ["new"])
 
             del dataloader
             gc.collect()
@@ -870,7 +871,8 @@ class Trainer_yolo:
             self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
             self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
             if result2 > self.val_best_map50:
-                self.save_checkpoint(self.epoch + 1, ["best"])
+                # self.save_checkpoint(self.epoch + 1, ["best"])
+                self.save_checkpoint(self.epoch + 1)
                 self.val_best_map50 = result2
 
         return out_dict

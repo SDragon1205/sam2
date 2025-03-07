@@ -260,6 +260,7 @@ trainer:
           downsample_rate: 1
           dropout: 0.1
           kv_in_dim: 128
+        only_sa: True
       num_layers: 4
 
     memory_encoder:
@@ -579,7 +580,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_old.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

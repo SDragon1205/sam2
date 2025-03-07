@@ -1,7 +1,7 @@
 # @package _global_
 
 scratch:
-  mode: val #val #train # train_only
+  mode: train #val #train # train_only
   init_cond_frames_mode: 1
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
@@ -12,7 +12,7 @@ scratch:
   memory_before_neck: False
   mask_for_mem_sigmoid: False
   use_gt_in_first_frame: False
-  skip_first_frame: True
+  skip_first_frame: False
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
@@ -232,13 +232,13 @@ trainer:
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
       d_model: 128
-      pos_enc_at_input: true
+      pos_enc_at_input: false
       layer:
         _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
         activation: relu
         dim_feedforward: 2048
         dropout: 0.1
-        pos_enc_at_attn: false
+        pos_enc_at_attn: true
         self_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
@@ -260,7 +260,8 @@ trainer:
           downsample_rate: 1
           dropout: 0.1
           kv_in_dim: 128
-      num_layers: 4
+        # only_sa: True
+      num_layers: 1
 
     memory_encoder:
         _target_: sam2.modeling.memory_encoder.MemoryEncoder
@@ -292,7 +293,7 @@ trainer:
         in_dim: 128
         no_mask_downsampler: True
 
-    num_maskmem: 1
+    num_maskmem: 7
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -579,7 +580,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_old.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_7_memory_position_0_no_mask_downsampler_attentionlayer_1.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

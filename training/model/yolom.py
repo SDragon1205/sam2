@@ -682,6 +682,7 @@ class YOLOMTrain(YOLOMBase):
             yolo_outputs_clone,
             img_ids,
             init_cond_frames_gt,
+            pix_feat,
         )
 
         # # 比較 yolo_outputs[0]
