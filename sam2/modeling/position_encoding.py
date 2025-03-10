@@ -237,3 +237,68 @@ def apply_rotary_enc(
             freqs_cis = freqs_cis.unsqueeze(2).expand(-1, -1, r, -1, -1).flatten(2, 3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
     return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
+
+###############################################################################################
+class PositionEmbeddingSine3D(nn.Module):
+    """
+    這是 Position Embedding 的 3D 版本，適用於 CNN + Transformer，
+    在 (x, y, channel) 維度上進行位置編碼。
+    """
+
+    def __init__(
+        self,
+        num_pos_feats: int,
+        num_channels: int,
+        temperature: int = 10000,
+        normalize: bool = True,
+        scale: Optional[float] = None,
+    ):
+        super().__init__()
+        assert num_pos_feats % 2 == 0, "num_pos_feats 需要是偶數"
+
+        self.num_pos_feats = num_pos_feats // 2  # x, y 共享一半維度
+        self.num_channel_feats = num_channels // 2  # channel 共享另一半維度
+        self.temperature = temperature
+        self.normalize = normalize
+
+        if scale is not None and normalize is False:
+            raise ValueError("如果使用 scale，normalize 需要設為 True")
+        if scale is None:
+            scale = 2 * math.pi
+        self.scale = scale
+
+    def _encode(self, tensor, num_feats):
+        """通用 Sinusoidal Position Encoding"""
+        dim_t = torch.arange(num_feats, dtype=torch.float32, device=tensor.device)
+        dim_t = self.temperature ** (2 * (dim_t // 2) / num_feats)
+        
+        tensor_embed = tensor[:, None] / dim_t
+        pos = torch.stack((tensor_embed[:, 0::2].sin(), tensor_embed[:, 1::2].cos()), dim=2).flatten(1)
+        return pos
+
+    def forward(self, x: torch.Tensor):
+        """
+        x: (B, C, H, W) 張量
+        回傳位置編碼: (B, C, H, W)
+        """
+        B, C, H, W = x.shape
+        device = x.device
+
+        y_embed = torch.arange(1, H + 1, dtype=torch.float32, device=device).view(1, -1, 1).repeat(B, 1, W)
+        x_embed = torch.arange(1, W + 1, dtype=torch.float32, device=device).view(1, 1, -1).repeat(B, H, 1)
+        c_embed = torch.arange(1, C + 1, dtype=torch.float32, device=device).view(1, -1).repeat(B, 1)
+
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            c_embed = c_embed / (c_embed[:, -1:] + eps) * self.scale
+
+        pos_x = self._encode(x_embed.flatten(), self.num_pos_feats).reshape(B, H, W, -1)
+        pos_y = self._encode(y_embed.flatten(), self.num_pos_feats).reshape(B, H, W, -1)
+        pos_c = self._encode(c_embed.flatten(), self.num_channel_feats).reshape(B, C, -1)
+
+        pos = torch.cat((pos_y, pos_x), dim=-1).permute(0, 3, 1, 2)  # (B, D, H, W)
+        pos = pos.unsqueeze(1).repeat(1, C, 1, 1, 1)  # (B, C, D, H, W)
+        pos = torch.cat((pos, pos_c[:, :, None, None, :].repeat(1, 1, H, W, 1)), dim=-1)  # (B, C, D+Dc, H, W)
+        return pos

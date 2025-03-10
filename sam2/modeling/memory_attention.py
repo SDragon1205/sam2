@@ -12,7 +12,7 @@ from torch import nn, Tensor
 from sam2.modeling.sam.transformer import RoPEAttention
 
 from sam2.modeling.sam2_utils import get_activation_fn, get_clones
-
+import sys
 
 class MemoryAttentionLayer(nn.Module):
 
@@ -70,7 +70,9 @@ class MemoryAttentionLayer(nn.Module):
         if num_k_exclude_rope > 0:
             assert isinstance(self.cross_attn_image, RoPEAttention)
             kwds = {"num_k_exclude_rope": num_k_exclude_rope}
-
+        # print("self.cross_attn_image.rope_k_repeat:", self.cross_attn_image.rope_k_repeat)
+        # print("self.cross_attn_image.kv_in_dim:", self.cross_attn_image.kv_in_dim)
+        # sys.exit()
         # Cross-Attention
         tgt2 = self.norm2(tgt)
         tgt2 = self.cross_attn_image(
@@ -95,6 +97,7 @@ class MemoryAttentionLayer(nn.Module):
         tgt = self._forward_sa(tgt, query_pos)
         if not self.only_sa:
             tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
+            # print("dont need ca")
         # MLP
         tgt2 = self.norm3(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))

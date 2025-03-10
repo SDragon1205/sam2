@@ -113,6 +113,7 @@ class YOLOMBase(torch.nn.Module):
         use_origin_yolo_outputs_encode: bool = False,
         self_memory_encode: bool = False,
         recursive_memory: bool = False,
+        temp_pos_enc: bool = True,
     ):
         super().__init__()
 
@@ -228,6 +229,7 @@ class YOLOMBase(torch.nn.Module):
         self.use_origin_yolo_outputs_encode = use_origin_yolo_outputs_encode
         self.self_memory_encode = self_memory_encode
         self.recursive_memory = recursive_memory
+        self.temp_pos_enc = temp_pos_enc
 
     @property
     def device(self):
@@ -486,8 +488,13 @@ class YOLOMBase(torch.nn.Module):
         # )
         if self.memory_before_neck:
             x_preds = self.yolo.forward_neck_head(backbone_features)
+            # print("self.yolo.forward_neck_head")
+            # print("x_preds[0]:", x_preds[0].shape)
+            # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
+            # print("x_preds[1]:", x_preds[0].shape, x_preds[1].shape, x_preds[2].shape)
         else:
             x_preds = self.yolo.forward_head(backbone_features)
+        
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
         # sys.exit()
@@ -563,6 +570,8 @@ class YOLOMBase(torch.nn.Module):
         # sys.exit()
         if self.memory_before_neck:
             backbone_out = self.yolo.forward_backbone(img_batch)
+            # print("self.yolo.forward_backbone")
+            # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
         else:
             backbone_out = self.yolo.forward_backbone_neck(img_batch)
         # gt_yolo_out = self.freeze_model.model._predict_once(img_batch)
@@ -691,9 +700,15 @@ class YOLOMBase(torch.nn.Module):
                 maskmem_enc = prev["maskmem_pos_enc"][-1].to(device)
                 maskmem_enc = maskmem_enc.flatten(2).permute(2, 0, 1)
                 # Temporal positional encoding
-                maskmem_enc = (
-                    maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
-                )
+                if self.temp_pos_enc:  
+                    maskmem_enc = (
+                        maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
+                    )
+                else:
+                    # print("self.temp_pos_enc:", self.temp_pos_enc)
+                    maskmem_enc = (
+                        maskmem_enc
+                    )
                 # print("t_pos, self.num_maskmem - t_pos - 1:", t_pos, self.num_maskmem - t_pos - 1)
                 to_cat_memory_pos_embed.append(maskmem_enc)
             # print("")
@@ -818,7 +833,7 @@ class YOLOMBase(torch.nn.Module):
         # print("feat_sizes:", feat_sizes)
         # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
         pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
-
+        # print("_encode_new_memory pix_feat:", pix_feat.shape)
         # if self.non_overlap_masks_for_mem_enc and not self.training:
         #     # optionally, apply non-overlapping constraints to the masks (it's applied
         #     # in the batch dimension and should only be used during eval, where all
@@ -854,12 +869,13 @@ class YOLOMBase(torch.nn.Module):
             # print("pix_feat:", pix_feat.shape)
             # print("mask_for_mem:", mask_for_mem.shape)
             # sys.exit()
+        # pix_feat_clone = pix_feat.clone()
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
         maskmem_features = maskmem_out["vision_features"]
         maskmem_pos_enc = maskmem_out["vision_pos_enc"]
-        # print("torch.equal(maskmem_features, pix_feat)", torch.equal(maskmem_features, pix_feat))
+        # print("torch.equal(maskmem_features, pix_feat_clone)", torch.equal(maskmem_features, pix_feat_clone))
         # # add a no-object embedding to the spatial memory to indicate that the frame
         # # is predicted to be occluded (i.e. no object is appearing in the frame)
         # if self.no_obj_embed_spatial is not None:
@@ -989,6 +1005,7 @@ class YOLOMBase(torch.nn.Module):
             track_in_reverse=track_in_reverse,
         )
         # pix_feat_clone = pix_feat.clone()
+        # print("_track_step:")
         # print("pix_feat:", pix_feat.shape)
         # print("high_res_features:", high_res_features[0].shape, high_res_features[1].shape)
         if self.memory_position == 0: 
