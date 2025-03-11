@@ -513,18 +513,19 @@ class YOLOMTrain(YOLOMBase):
             #     self.add_all_frames_to_correct_as_cond
             #     and stage_id in frames_to_add_correction_pt
             # )
-
-            if self.use_gt_in_all_frame:
-                output_dict["cond_frame_outputs"][0] = current_out
-                # print("output_dict[cond_frame_outputs][0]:", output_dict["cond_frame_outputs"][0])
-            elif not self.has_cond_frame_outputs:
-                output_dict["non_cond_frame_outputs"][stage_id] = current_out
-                # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id])
-            else:
-                if add_output_as_cond_frame:
-                    output_dict["cond_frame_outputs"][stage_id] = current_out
-                else:
+            if self.init_cond_frames_mode != 2:
+                # print("self.init_cond_frames_mode != 2")
+                if self.use_gt_in_all_frame:
+                    output_dict["cond_frame_outputs"][0] = current_out
+                    # print("output_dict[cond_frame_outputs][0]:", output_dict["cond_frame_outputs"][0])
+                elif not self.has_cond_frame_outputs:
                     output_dict["non_cond_frame_outputs"][stage_id] = current_out
+                    # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id])
+                else:
+                    if add_output_as_cond_frame:
+                        output_dict["cond_frame_outputs"][stage_id] = current_out
+                    else:
+                        output_dict["non_cond_frame_outputs"][stage_id] = current_out
 
             # for i_cur in range(len(yolo_outputs)):
             #     print(f"yolo_outputs[{i_cur}]: {yolo_outputs[i_cur].shape}")
@@ -671,19 +672,23 @@ class YOLOMTrain(YOLOMBase):
         )
 
         # 呼叫函數
-        current_out = self._encode_memory_in_output(
-            current_vision_feats,
-            feat_sizes,
-            # point_inputs,
-            run_mem_encoder,
-            # high_res_masks,
-            # object_score_logits,
-            # current_out,
-            yolo_outputs_clone,
-            img_ids,
-            init_cond_frames_gt,
-            pix_feat,
-        )
+        if self.init_cond_frames_mode != 2:
+            # print("self._encode_memory_in_output")
+            current_out = self._encode_memory_in_output(
+                current_vision_feats,
+                feat_sizes,
+                # point_inputs,
+                run_mem_encoder,
+                # high_res_masks,
+                # object_score_logits,
+                # current_out,
+                yolo_outputs_clone,
+                img_ids,
+                init_cond_frames_gt,
+                pix_feat,
+            )
+        else:
+            current_out = None
 
         # # 比較 yolo_outputs[0]
         # if not torch.equal(yolo_outputs_clone[0], yolo_outputs[0]):

@@ -779,6 +779,7 @@ class YOLOMBase(torch.nn.Module):
             #     else:
             #         num_obj_ptr_tokens = 0
         else:
+            # print("is_init_cond_frame")
             # for initial conditioning frames, encode them without using any previous memory
             # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
             if self.directly_add_no_mem_embed:
@@ -829,7 +830,7 @@ class YOLOMBase(torch.nn.Module):
         H, W = feat_sizes[self.memory_position]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
         # print("B, C, H, W:", B, C, H, W)
-        # print("current_vision_feats[-1].shape:", current_vision_feats[-1].shape)
+        # print("current_vision_feats[self.memory_position].shape:", current_vision_feats[self.memory_position].shape)
         # print("feat_sizes:", feat_sizes)
         # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
         pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)

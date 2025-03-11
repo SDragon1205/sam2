@@ -596,6 +596,7 @@ class Trainer_yolo:
 
         # loss contains multiple sub-components we wish to log
         step_losses = {}
+
         if isinstance(loss, dict):
             step_losses.update(
                 {f"Losses/{phase}_{key}_{k}": v for k, v in loss.items()}
@@ -604,12 +605,13 @@ class Trainer_yolo:
                 loss, loss_log_str, self.steps[phase]
             )
 
-        if self.steps[phase] % self.logging_conf.log_scalar_frequency == 0:
-            self.logger.log(
-                loss_log_str,
-                loss,
-                self.steps[phase],
-            )
+        if self.mode == "train" or self.mode == "train_only":
+            if self.steps[phase] % self.logging_conf.log_scalar_frequency == 0:
+                self.logger.log(
+                    loss_log_str,
+                    loss,
+                    self.steps[phase],
+                )
 
         self.steps[phase] += 1
 
@@ -730,7 +732,8 @@ class Trainer_yolo:
         outs = self.val_epoch(dataloader, phase=Phase.VAL)
         del dataloader
         gc.collect()
-        self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0
+        if self.mode == "train":
+            self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0
 
         if self.distributed_rank == 0:
             with g_pathmgr.open(
@@ -831,11 +834,12 @@ class Trainer_yolo:
             if data_iter % self.logging_conf.log_scalar_frequency == 0:
                 # Log progress meters.
                 for progress_meter in progress.meters:
-                    self.logger.log(
-                        os.path.join("Step_Stats", phase, progress_meter.name),
-                        progress_meter.val,
-                        self.steps[Phase.VAL],
-                    )
+                    if self.mode == "train":
+                        self.logger.log(
+                            os.path.join("Step_Stats", phase, progress_meter.name),
+                            progress_meter.val,
+                            self.steps[Phase.VAL],
+                        )
 
             if data_iter % 10 == 0:
                 dist.barrier()
@@ -1264,7 +1268,8 @@ class Trainer_yolo:
         if step % self.logging_conf.log_scalar_frequency == 0:
             for k in loss:
                 log_str = os.path.join(loss_str, k)
-                self.logger.log(log_str, loss[k], step)
+                if self.mode == "train" or self.mode == "train_only":
+                    self.logger.log(log_str, loss[k], step)
         return core_loss
 
 

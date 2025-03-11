@@ -94,6 +94,13 @@ class MemoryAttentionLayer(nn.Module):
     ) -> torch.Tensor:
 
         # Self-Attn, Cross-Attn
+        # print("=================================")
+        # print("MemoryAttentionLayer:")
+        # print("tgt:", tgt.shape)
+        # print("memory:", memory.shape)
+        # print("pos:", pos.shape)
+        # print("query_pos:", query_pos.shape)
+        # print("num_k_exclude_rope:", num_k_exclude_rope)
         tgt = self._forward_sa(tgt, query_pos)
         if not self.only_sa:
             tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)

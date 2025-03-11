@@ -432,7 +432,7 @@ trainer:
       datasets:
       # # SA1B as an example of an image dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: true
+      #   training: False
       #   video_dataset:
       #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
       #     img_folder: ${sa1b_dataset_val.img_folder}
@@ -448,7 +448,7 @@ trainer:
       # # val
       # # SA-V as an example of a video dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: true
+      #   training: False
       #   video_dataset:
       #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
       #     img_folder: ${sav_dataset_val.img_folder}
@@ -465,7 +465,7 @@ trainer:
 
       # test sav_dataset_test
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-        training: true
+        training: False
         video_dataset:
           _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
           img_folder: ${sav_dataset_test.img_folder}

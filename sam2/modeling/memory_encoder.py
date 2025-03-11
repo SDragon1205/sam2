@@ -179,10 +179,17 @@ class MemoryEncoder(nn.Module):
             pos = self.position_encoding(pix_feat).to(pix_feat.dtype)
             return {"vision_features": pix_feat, "vision_pos_enc": [pos]}
         if self.no_mask_downsampler:
+            # print("=================================")
+            # print("MemoryEncoder:")
+            # print("pix_feat:", pix_feat.shape)
             x = self.pix_feat_proj(pix_feat)
+            # print("pix_feat_proj:", x.shape)
             x = self.fuser(x)
+            # print("fuser:", x.shape)
             x = self.out_proj(x)
+            # print("out_proj:", x.shape)
             pos = self.position_encoding(x).to(x.dtype)
+            # print("position_encoding:", pos.shape)
             return {"vision_features": x, "vision_pos_enc": [pos]}
         ## Process masks
         # sigmoid, so that less domain shift from gt masks which are bool
