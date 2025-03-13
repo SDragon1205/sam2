@@ -261,7 +261,7 @@ trainer:
           downsample_rate: 1
           dropout: 0.1
           # kv_in_dim: 512
-        # only_sa: True
+        only_sa: True
       num_layers: 1
 
     memory_encoder:

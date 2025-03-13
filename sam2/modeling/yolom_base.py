@@ -114,6 +114,8 @@ class YOLOMBase(torch.nn.Module):
         self_memory_encode: bool = False,
         recursive_memory: bool = False,
         temp_pos_enc: bool = True,
+        # directly_use_no_mem_embed: bool = False,
+        encode_first_frame: bool = False,
     ):
         super().__init__()
 
@@ -230,7 +232,8 @@ class YOLOMBase(torch.nn.Module):
         self.self_memory_encode = self_memory_encode
         self.recursive_memory = recursive_memory
         self.temp_pos_enc = temp_pos_enc
-
+        # self.directly_use_no_mem_embed = directly_use_no_mem_embed
+        self.encode_first_frame = encode_first_frame
     @property
     def device(self):
         return next(self.parameters()).device
@@ -624,7 +627,7 @@ class YOLOMBase(torch.nn.Module):
         tpos_sign_mul = -1 if track_in_reverse else 1
         # Step 1: condition the visual features of the current frame on previous memories
         # print("is_init_cond_frame:", is_init_cond_frame)
-        if not is_init_cond_frame:
+        if not is_init_cond_frame or self.encode_first_frame:
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
             # Add conditioning frames's output first (all cond frames have t_pos=0 for
@@ -678,8 +681,10 @@ class YOLOMBase(torch.nn.Module):
                         # then seek further among every r-th frames
                         prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
                 # print(f"t_pos, prev_frame_idx:, {t_pos}, {prev_frame_idx}")
+                # print("prev_frame_idx:", prev_frame_idx)
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
                 # print("out:", out)
+                # sys.exit()
                 if out is None:
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                     # frames, we still attend to it as if it's a non-conditioning frame.
@@ -709,8 +714,16 @@ class YOLOMBase(torch.nn.Module):
                     maskmem_enc = (
                         maskmem_enc
                     )
+                # print("to_cat_memory", feats.flatten(2).permute(2, 0, 1).shape)
+                # print("to_cat_memory_pos_embed:", maskmem_enc.shape)
                 # print("t_pos, self.num_maskmem - t_pos - 1:", t_pos, self.num_maskmem - t_pos - 1)
                 to_cat_memory_pos_embed.append(maskmem_enc)
+
+            # print("directly_add_no_mem_embed false:")
+            # print("to_cat_memory", self.no_mem_embed.expand(1, B, self.mem_dim).shape)
+            # print("to_cat_memory_pos_embed", self.no_mem_pos_enc.expand(1, B, self.mem_dim).shape)
+            # print("pix_feat_with_mem:", (current_vision_feats[-1] + self.no_mem_embed).permute(1, 2, 0).view(B, C, H, W).shape)
+            # sys.exit()
             # print("")
             # # Construct the list of past object pointers
             # if self.use_obj_ptrs_in_encoder:
@@ -791,7 +804,11 @@ class YOLOMBase(torch.nn.Module):
                 # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
                 # sys.exit()
                 return pix_feat_with_mem
-
+            # elif self.directly_use_no_mem_embed:
+            #     # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
+            #     to_cat_memory = [self.no_mem_embed.expand(1, B, self.mem_dim)]
+            #     to_cat_memory_pos_embed = [self.no_mem_pos_enc.expand(1, B, self.mem_dim)]
+            # else:
             # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
             to_cat_memory = [self.no_mem_embed.expand(1, B, self.mem_dim)]
             to_cat_memory_pos_embed = [self.no_mem_pos_enc.expand(1, B, self.mem_dim)]
@@ -820,35 +837,42 @@ class YOLOMBase(torch.nn.Module):
         pred_masks_high_res,
         # object_score_logits,
         # is_mask_from_pts,
+        is_first_frame=False,
     ):
         """Encode the current image and its prediction into a memory feature."""
-        # B = current_vision_feats[-1].size(1)  # batch size on this frame
-        # C = self.hidden_dim
-        # H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
-        B = current_vision_feats[self.memory_position].size(1)  # batch size on this frame
         C = self.hidden_dim
-        H, W = feat_sizes[self.memory_position]  # top-level (lowest-resolution) feature size
-        # top-level feature, (HW)BC => BCHW
-        # print("B, C, H, W:", B, C, H, W)
-        # print("current_vision_feats[self.memory_position].shape:", current_vision_feats[self.memory_position].shape)
-        # print("feat_sizes:", feat_sizes)
-        # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
-        pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
-        # print("_encode_new_memory pix_feat:", pix_feat.shape)
-        # if self.non_overlap_masks_for_mem_enc and not self.training:
-        #     # optionally, apply non-overlapping constraints to the masks (it's applied
-        #     # in the batch dimension and should only be used during eval, where all
-        #     # the objects come from the same video under batch size 1).
-        #     pred_masks_high_res = self._apply_non_overlapping_constraints(
-        #         pred_masks_high_res
-        #     )
-        # # scale the raw mask logits with a temperature before applying sigmoid
-        # binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
-        # if binarize and not self.training:
-        #     mask_for_mem = (pred_masks_high_res > 0).float()
-        # else:
-        #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
-        #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
+        H, W = feat_sizes[self.memory_position]
+        if self.recursive_memory and (not is_first_frame):
+            B = current_vision_feats.size(0)
+            pix_feat = current_vision_feats
+        else:
+            # B = current_vision_feats[-1].size(1)  # batch size on this frame
+            # C = self.hidden_dim
+            # H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
+            B = current_vision_feats[self.memory_position].size(1)  # batch size on this frame
+            # C = self.hidden_dim
+            # H, W = feat_sizes[self.memory_position]  # top-level (lowest-resolution) feature size
+            # top-level feature, (HW)BC => BCHW
+            # print("B, C, H, W:", B, C, H, W)
+            # print("current_vision_feats[self.memory_position].shape:", current_vision_feats[self.memory_position].shape)
+            # print("feat_sizes:", feat_sizes)
+            # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
+            pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
+            # print("_encode_new_memory pix_feat:", pix_feat.shape)
+            # if self.non_overlap_masks_for_mem_enc and not self.training:
+            #     # optionally, apply non-overlapping constraints to the masks (it's applied
+            #     # in the batch dimension and should only be used during eval, where all
+            #     # the objects come from the same video under batch size 1).
+            #     pred_masks_high_res = self._apply_non_overlapping_constraints(
+            #         pred_masks_high_res
+            #     )
+            # # scale the raw mask logits with a temperature before applying sigmoid
+            # binarize = self.binarize_mask_from_pts_for_mem_enc and is_mask_from_pts
+            # if binarize and not self.training:
+            #     mask_for_mem = (pred_masks_high_res > 0).float()
+            # else:
+            #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
+            #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
         if self.self_memory_encode:
             mask_for_mem = torch.tensor([0])
         else:
@@ -1005,6 +1029,7 @@ class YOLOMBase(torch.nn.Module):
             num_frames=num_frames,
             track_in_reverse=track_in_reverse,
         )
+        # print("_prepare_memory_conditioned_features pix_feat:", pix_feat.shape, pix_feat)
         # pix_feat_clone = pix_feat.clone()
         # print("_track_step:")
         # print("pix_feat:", pix_feat.shape)
@@ -1174,6 +1199,7 @@ class YOLOMBase(torch.nn.Module):
         img_ids,
         init_cond_frames_gt,
         recursive_pix_feat,
+        is_first_frame = False,
     ):
         if run_mem_encoder and self.num_maskmem > 0:
             # if self.use_freeze_model:
@@ -1191,7 +1217,16 @@ class YOLOMBase(torch.nn.Module):
             else:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)
             
-            if self.recursive_memory:
+            # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[1].shape, current_vision_feats[2].shape)
+            # C = self.hidden_dim
+            # H, W = feat_sizes[self.memory_position]
+            # B = current_vision_feats[self.memory_position].size(1)  # batch size on this frame
+            # pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
+            # print("current_vision_feats:", pix_feat.shape, pix_feat)
+            # print("recursive_pix_feat:", recursive_pix_feat[0].shape, recursive_pix_feat[0])
+            # sys.exit()
+            if self.recursive_memory and (not is_first_frame):
+                # print("_encode_new_memory:", recursive_pix_feat.shape, recursive_pix_feat)
                 maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                     current_vision_feats=recursive_pix_feat,
                     feat_sizes=feat_sizes,
@@ -1206,6 +1241,7 @@ class YOLOMBase(torch.nn.Module):
                     pred_masks_high_res=high_res_masks_for_mem_enc,
                     # object_score_logits=object_score_logits,
                     # is_mask_from_pts=(point_inputs is not None),
+                    is_first_frame=is_first_frame,
                 )
             # current_out["maskmem_features"] = maskmem_features
             # current_out["maskmem_pos_enc"] = maskmem_pos_enc

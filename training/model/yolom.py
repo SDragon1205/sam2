@@ -593,6 +593,23 @@ class YOLOMTrain(YOLOMBase):
         # gt_masks=None,
         init_cond_frames_gt=None,
     ):
+        if frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2:
+            current_out = self._encode_memory_in_output(
+                current_vision_feats,
+                feat_sizes,
+                # point_inputs,
+                run_mem_encoder,
+                # high_res_masks,
+                # object_score_logits,
+                # current_out,
+                None,
+                img_ids,
+                init_cond_frames_gt,
+                None,
+                is_first_frame=True,
+            )
+            output_dict["non_cond_frame_outputs"][-1] = current_out
+            # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
         yolo_outputs, high_res_features, pix_feat = self._track_step(
@@ -608,7 +625,7 @@ class YOLOMTrain(YOLOMBase):
             track_in_reverse,
             prev_sam_mask_logits,
         )
-
+        # print("after _track_step pix_feat:", pix_feat.shape, pix_feat)
         # (
         #     low_res_multimasks,
         #     high_res_multimasks,
@@ -662,14 +679,16 @@ class YOLOMTrain(YOLOMBase):
         # # it into a new memory feature (that can be used in future frames)
         
         # 複製一份原始的 yolo_outputs
-        yolo_outputs_clone = (
-            yolo_outputs[0].clone(),  # 複製第一個張量
-            [
-                yolo_outputs[1][0].clone(),  # 複製第二個元組中的第一個張量
-                yolo_outputs[1][1].clone(),  # 複製第二個元組中的第二個張量
-                yolo_outputs[1][2].clone()   # 複製第二個元組中的第三個張量
-            ]
-        )
+        yolo_outputs_clone = None
+        if not self.self_memory_encode:
+            yolo_outputs_clone = (
+                yolo_outputs[0].clone(),  # 複製第一個張量
+                [
+                    yolo_outputs[1][0].clone(),  # 複製第二個元組中的第一個張量
+                    yolo_outputs[1][1].clone(),  # 複製第二個元組中的第二個張量
+                    yolo_outputs[1][2].clone()   # 複製第二個元組中的第三個張量
+                ]
+            )
 
         # 呼叫函數
         if self.init_cond_frames_mode != 2:

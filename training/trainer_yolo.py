@@ -792,7 +792,8 @@ class Trainer_yolo:
             # sys.exit()
             # compute output
             with torch.no_grad():
-                with torch.cuda.amp.autocast(
+                # with torch.cuda.amp.autocast(
+                with torch.amp.autocast('cuda',
                     enabled=(self.optim_conf.amp.enabled if self.optim_conf else False),
                     dtype=(
                         get_amp_type(self.optim_conf.amp.amp_dtype)
@@ -866,6 +867,7 @@ class Trainer_yolo:
         self.validator.check_stats(stats)
         self.validator.finalize_metrics()
         # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
+
         seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
         if self.mode == "train":
             self.logger.log(f"Metrics/val_Images", seen, self.epoch)
@@ -874,11 +876,17 @@ class Trainer_yolo:
             self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
             self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
             self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
+            if self.epoch == 70 or self.epoch == 100:
+                self.val_best_map50 = 0
             if result2 > self.val_best_map50:
                 # self.save_checkpoint(self.epoch + 1, ["best"])
                 self.save_checkpoint(self.epoch + 1)
                 self.val_best_map50 = result2
-
+                if self.epoch < 70:
+                    self.save_checkpoint(self.epoch + 1, ["best_before_70"])
+                elif self.epoch < 100:
+                    self.save_checkpoint(self.epoch + 1, ["best_before_100"])
+        
         return out_dict
 
     def _get_trainer_state(self, phase):
@@ -1068,8 +1076,8 @@ class Trainer_yolo:
         # grads will also update a model even if the step doesn't produce
         # gradients
         self.optim.zero_grad(set_to_none=True)
-        with torch.cuda.amp.autocast(
-        # with torch.amp.autocast(
+        # with torch.cuda.amp.autocast(
+        with torch.amp.autocast('cuda',
             enabled=self.optim_conf.amp.enabled,
             dtype=get_amp_type(self.optim_conf.amp.amp_dtype),
         ):

@@ -120,6 +120,7 @@ class MemoryAttention(nn.Module):
         layer: nn.Module,
         num_layers: int,
         batch_first: bool = True,  # Do layers expect batch first input?
+        scale_for_pos_enc_at_input = 0.1,
     ):
         super().__init__()
         self.d_model = d_model
@@ -128,6 +129,7 @@ class MemoryAttention(nn.Module):
         self.norm = nn.LayerNorm(d_model)
         self.pos_enc_at_input = pos_enc_at_input
         self.batch_first = batch_first
+        self.scale_for_pos_enc_at_input = scale_for_pos_enc_at_input
 
     def forward(
         self,
@@ -151,7 +153,7 @@ class MemoryAttention(nn.Module):
 
         output = curr
         if self.pos_enc_at_input and curr_pos is not None:
-            output = output + 0.1 * curr_pos
+            output = output + self.scale_for_pos_enc_at_input * curr_pos
 
         if self.batch_first:
             # Convert to batch first
