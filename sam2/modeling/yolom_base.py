@@ -116,6 +116,7 @@ class YOLOMBase(torch.nn.Module):
         temp_pos_enc: bool = True,
         # directly_use_no_mem_embed: bool = False,
         encode_first_frame: bool = False,
+        fuse_feature_and_memory: bool = False
     ):
         super().__init__()
 
@@ -234,6 +235,8 @@ class YOLOMBase(torch.nn.Module):
         self.temp_pos_enc = temp_pos_enc
         # self.directly_use_no_mem_embed = directly_use_no_mem_embed
         self.encode_first_frame = encode_first_frame
+        self.fuse_feature_and_memory = fuse_feature_and_memory
+
     @property
     def device(self):
         return next(self.parameters()).device
@@ -575,6 +578,7 @@ class YOLOMBase(torch.nn.Module):
             backbone_out = self.yolo.forward_backbone(img_batch)
             # print("self.yolo.forward_backbone")
             # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
+            # print("backbone_out['backbone_fpn'][0]:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][0])
         else:
             backbone_out = self.yolo.forward_backbone_neck(img_batch)
         # gt_yolo_out = self.freeze_model.model._predict_once(img_batch)
@@ -826,7 +830,7 @@ class YOLOMBase(torch.nn.Module):
         )
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
-        # print("pix_feat_with_mem1:", pix_feat_with_mem.shape)
+        # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
         # sys.exit()
         return pix_feat_with_mem
 
@@ -842,7 +846,7 @@ class YOLOMBase(torch.nn.Module):
         """Encode the current image and its prediction into a memory feature."""
         C = self.hidden_dim
         H, W = feat_sizes[self.memory_position]
-        if self.recursive_memory and (not is_first_frame):
+        if self.recursive_memory and (not is_first_frame) and (not self.fuse_feature_and_memory):
             B = current_vision_feats.size(0)
             pix_feat = current_vision_feats
         else:
@@ -874,7 +878,10 @@ class YOLOMBase(torch.nn.Module):
             #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
             #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
         if self.self_memory_encode:
-            mask_for_mem = torch.tensor([0])
+            if self.recursive_memory and self.fuse_feature_and_memory:
+                mask_for_mem = pred_masks_high_res
+            else:
+                mask_for_mem = torch.tensor([0])
         else:
             # print("pred_masks_high_res max min", torch.max(pred_masks_high_res), torch.min(pred_masks_high_res))
             if self.mask_for_mem_sigmoid:
@@ -1207,7 +1214,10 @@ class YOLOMBase(torch.nn.Module):
             # else:
             # print("yolo_outputs[0].device:", yolo_outputs[0].device)
             if self.self_memory_encode:
-                high_res_masks_for_mem_enc = None
+                if self.recursive_memory and self.fuse_feature_and_memory:
+                    high_res_masks_for_mem_enc = recursive_pix_feat
+                else:
+                    high_res_masks_for_mem_enc = None
             elif init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
                 high_res_masks_for_mem_enc = self._get_high_res_masks_from_gt(init_cond_frames_gt, img_ids, yolo_outputs[0].device)
                 # print("_get_high_res_masks_from_gt")
@@ -1225,7 +1235,7 @@ class YOLOMBase(torch.nn.Module):
             # print("current_vision_feats:", pix_feat.shape, pix_feat)
             # print("recursive_pix_feat:", recursive_pix_feat[0].shape, recursive_pix_feat[0])
             # sys.exit()
-            if self.recursive_memory and (not is_first_frame):
+            if self.recursive_memory and (not is_first_frame) and (not self.fuse_feature_and_memory):
                 # print("_encode_new_memory:", recursive_pix_feat.shape, recursive_pix_feat)
                 maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                     current_vision_feats=recursive_pix_feat,
@@ -1252,99 +1262,99 @@ class YOLOMBase(torch.nn.Module):
             current_out = {"maskmem_features": None, "maskmem_pos_enc": None}
         return current_out
 
-    def track_step(
-        self,
-        frame_idx,
-        is_init_cond_frame,
-        current_vision_feats,
-        current_vision_pos_embeds,
-        feat_sizes,
-        point_inputs,
-        mask_inputs,
-        output_dict,
-        num_frames,
-        track_in_reverse=False,  # tracking in reverse time order (for demo usage)
-        # Whether to run the memory encoder on the predicted masks. Sometimes we might want
-        # to skip the memory encoder with `run_mem_encoder=False`. For example,
-        # in demo we might call `track_step` multiple times for each user click,
-        # and only encode the memory when the user finalizes their clicks. And in ablation
-        # settings like SAM training on static images, we don't need the memory encoder.
-        run_mem_encoder=True,
-        # The previously predicted SAM mask logits (which can be fed together with new clicks in demo).
-        prev_sam_mask_logits=None,
-    ):
-        current_out, sam_outputs, _, _ = self._track_step(
-            frame_idx,
-            is_init_cond_frame,
-            current_vision_feats,
-            current_vision_pos_embeds,
-            feat_sizes,
-            point_inputs,
-            mask_inputs,
-            output_dict,
-            num_frames,
-            track_in_reverse,
-            prev_sam_mask_logits,
-        )
+    # def track_step(
+    #     self,
+    #     frame_idx,
+    #     is_init_cond_frame,
+    #     current_vision_feats,
+    #     current_vision_pos_embeds,
+    #     feat_sizes,
+    #     point_inputs,
+    #     mask_inputs,
+    #     output_dict,
+    #     num_frames,
+    #     track_in_reverse=False,  # tracking in reverse time order (for demo usage)
+    #     # Whether to run the memory encoder on the predicted masks. Sometimes we might want
+    #     # to skip the memory encoder with `run_mem_encoder=False`. For example,
+    #     # in demo we might call `track_step` multiple times for each user click,
+    #     # and only encode the memory when the user finalizes their clicks. And in ablation
+    #     # settings like SAM training on static images, we don't need the memory encoder.
+    #     run_mem_encoder=True,
+    #     # The previously predicted SAM mask logits (which can be fed together with new clicks in demo).
+    #     prev_sam_mask_logits=None,
+    # ):
+    #     current_out, sam_outputs, _, _ = self._track_step(
+    #         frame_idx,
+    #         is_init_cond_frame,
+    #         current_vision_feats,
+    #         current_vision_pos_embeds,
+    #         feat_sizes,
+    #         point_inputs,
+    #         mask_inputs,
+    #         output_dict,
+    #         num_frames,
+    #         track_in_reverse,
+    #         prev_sam_mask_logits,
+    #     )
 
-        (
-            _,
-            _,
-            _,
-            low_res_masks,
-            high_res_masks,
-            obj_ptr,
-            object_score_logits,
-        ) = sam_outputs
+    #     (
+    #         _,
+    #         _,
+    #         _,
+    #         low_res_masks,
+    #         high_res_masks,
+    #         obj_ptr,
+    #         object_score_logits,
+    #     ) = sam_outputs
 
-        current_out["pred_masks"] = low_res_masks
-        current_out["pred_masks_high_res"] = high_res_masks
-        current_out["obj_ptr"] = obj_ptr
-        if not self.training:
-            # Only add this in inference (to avoid unused param in activation checkpointing;
-            # it's mainly used in the demo to encode spatial memories w/ consolidated masks)
-            current_out["object_score_logits"] = object_score_logits
+    #     current_out["pred_masks"] = low_res_masks
+    #     current_out["pred_masks_high_res"] = high_res_masks
+    #     current_out["obj_ptr"] = obj_ptr
+    #     if not self.training:
+    #         # Only add this in inference (to avoid unused param in activation checkpointing;
+    #         # it's mainly used in the demo to encode spatial memories w/ consolidated masks)
+    #         current_out["object_score_logits"] = object_score_logits
 
-        # Finally run the memory encoder on the predicted mask to encode
-        # it into a new memory feature (that can be used in future frames)
-        self._encode_memory_in_output(
-            current_vision_feats,
-            feat_sizes,
-            point_inputs,
-            run_mem_encoder,
-            high_res_masks,
-            object_score_logits,
-            current_out,
-        )
+    #     # Finally run the memory encoder on the predicted mask to encode
+    #     # it into a new memory feature (that can be used in future frames)
+    #     self._encode_memory_in_output(
+    #         current_vision_feats,
+    #         feat_sizes,
+    #         point_inputs,
+    #         run_mem_encoder,
+    #         high_res_masks,
+    #         object_score_logits,
+    #         current_out,
+    #     )
 
-        return current_out
+    #     return current_out
 
-    def _use_multimask(self, is_init_cond_frame, point_inputs):
-        """Whether to use multimask output in the SAM head."""
-        num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(1)
-        multimask_output = (
-            self.multimask_output_in_sam
-            and (is_init_cond_frame or self.multimask_output_for_tracking)
-            and (self.multimask_min_pt_num <= num_pts <= self.multimask_max_pt_num)
-        )
-        return multimask_output
+    # def _use_multimask(self, is_init_cond_frame, point_inputs):
+    #     """Whether to use multimask output in the SAM head."""
+    #     num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(1)
+    #     multimask_output = (
+    #         self.multimask_output_in_sam
+    #         and (is_init_cond_frame or self.multimask_output_for_tracking)
+    #         and (self.multimask_min_pt_num <= num_pts <= self.multimask_max_pt_num)
+    #     )
+    #     return multimask_output
 
-    def _apply_non_overlapping_constraints(self, pred_masks):
-        """
-        Apply non-overlapping constraints to the object scores in pred_masks. Here we
-        keep only the highest scoring object at each spatial location in pred_masks.
-        """
-        batch_size = pred_masks.size(0)
-        if batch_size == 1:
-            return pred_masks
+    # def _apply_non_overlapping_constraints(self, pred_masks):
+    #     """
+    #     Apply non-overlapping constraints to the object scores in pred_masks. Here we
+    #     keep only the highest scoring object at each spatial location in pred_masks.
+    #     """
+    #     batch_size = pred_masks.size(0)
+    #     if batch_size == 1:
+    #         return pred_masks
 
-        device = pred_masks.device
-        # "max_obj_inds": object index of the object with the highest score at each location
-        max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
-        # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
-        batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
-        keep = max_obj_inds == batch_obj_inds
-        # suppress overlapping regions' scores below -10.0 so that the foreground regions
-        # don't overlap (here sigmoid(-10.0)=4.5398e-05)
-        pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
-        return pred_masks
+    #     device = pred_masks.device
+    #     # "max_obj_inds": object index of the object with the highest score at each location
+    #     max_obj_inds = torch.argmax(pred_masks, dim=0, keepdim=True)
+    #     # "batch_obj_inds": object index of each object slice (along dim 0) in `pred_masks`
+    #     batch_obj_inds = torch.arange(batch_size, device=device)[:, None, None, None]
+    #     keep = max_obj_inds == batch_obj_inds
+    #     # suppress overlapping regions' scores below -10.0 so that the foreground regions
+    #     # don't overlap (here sigmoid(-10.0)=4.5398e-05)
+    #     pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
+    #     return pred_masks

@@ -84,9 +84,9 @@ trunc_normal_(no_mem_pos_enc, std=0.02)
     #       num_layers: 2
 position_encoding = PositionEmbeddingSine(num_pos_feats=128,normalize= True,scale=None, temperature= 10000)
 mask_downsampler = MaskDownSampler(embed_dim=128, in_chans= 74, has_mask_down=False)
-layer = CXBlock(dim= 128,kernel_size= 7,padding= 3,layer_scale_init_value= 1e-6,use_dwconv= True)
+layer = CXBlock(dim= 256,kernel_size= 7,padding= 3,layer_scale_init_value= 1e-6,use_dwconv= True)
 fuser=Fuser(layer=layer, num_layers= 2)
-memory_encoder = MemoryEncoder(out_dim= 128, position_encoding=position_encoding, mask_downsampler=mask_downsampler, fuser=fuser, in_dim=128, no_mask_downsampler=True)#no_mask_downsampler= True)#, only_pos=True)
+memory_encoder = MemoryEncoder(out_dim= 128, position_encoding=position_encoding, mask_downsampler=mask_downsampler, fuser=fuser, in_dim=128, two_proj=True)#, no_mask_downsampler=True)#no_mask_downsampler= True)#, only_pos=True)
 # for k, v in memory_encoder.state_dict().items():  # 第一層
 #     print(k)
 memory_attention= MemoryAttention(
@@ -180,8 +180,8 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_self_memory_encode.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler.pt"
 # output_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolom_s_num_maskmem_1_memory_position_0_no_mask_downsampler.yaml/checkpoints/checkpoint.pt"
-output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
-
+# output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_fuse_fam_attentionlayer_1.pt"
 
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)

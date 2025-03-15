@@ -876,16 +876,17 @@ class Trainer_yolo:
             self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
             self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
             self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
-            if self.epoch == 70 or self.epoch == 100:
+            if self.epoch == 70 or self.epoch == 90:
                 self.val_best_map50 = 0
             if result2 > self.val_best_map50:
-                # self.save_checkpoint(self.epoch + 1, ["best"])
-                self.save_checkpoint(self.epoch + 1)
+                self.save_checkpoint(self.epoch + 1, ["best"])
+                # self.save_checkpoint(self.epoch + 1)
                 self.val_best_map50 = result2
                 if self.epoch < 70:
                     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
-                elif self.epoch < 100:
-                    self.save_checkpoint(self.epoch + 1, ["best_before_100"])
+                elif self.epoch < 90:
+                    self.save_checkpoint(self.epoch + 1)
+                    self.save_checkpoint(self.epoch + 1, ["best_before_90"])
         
         return out_dict
 

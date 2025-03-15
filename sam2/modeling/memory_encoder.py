@@ -153,11 +153,19 @@ class MemoryEncoder(nn.Module):
         in_dim=256,  # in_dim of pix_feats
         only_pos: bool = False,
         no_mask_downsampler: bool = False,
+        two_proj: bool = False,
+        proj_dim: int = 0,
     ):
         super().__init__()
         self.only_pos = only_pos
         self.no_mask_downsampler = no_mask_downsampler
         self.position_encoding = position_encoding
+        self.two_proj = two_proj
+        if self.two_proj:
+            if proj_dim != 0:
+                self.pix_feat_proj2 = nn.Conv2d(proj_dim, proj_dim, kernel_size=1)
+            else:
+                self.pix_feat_proj2 = nn.Conv2d(in_dim, in_dim, kernel_size=1)
 
         if not self.only_pos and not self.no_mask_downsampler:
             self.mask_downsampler = mask_downsampler
@@ -168,6 +176,11 @@ class MemoryEncoder(nn.Module):
             self.out_proj = nn.Identity()
             if out_dim != in_dim:
                 self.out_proj = nn.Conv2d(in_dim, out_dim, kernel_size=1)
+            elif two_proj:
+                if proj_dim != 0:
+                    self.out_proj = nn.Conv2d(in_dim+proj_dim, out_dim, kernel_size=1)
+                else:
+                    self.out_proj = nn.Conv2d(in_dim*2, out_dim, kernel_size=1)
 
     def forward(
         self,
@@ -175,6 +188,24 @@ class MemoryEncoder(nn.Module):
         masks: torch.Tensor,
         skip_mask_sigmoid: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.two_proj:
+            # print("pix_feat:", pix_feat.shape, pix_feat)
+            # print("masks:", masks.shape, masks)
+            x = self.pix_feat_proj(pix_feat)
+            # print("pix_feat_proj:", x.shape, x)
+            x2 = self.pix_feat_proj2(masks)
+            # print("pix_feat_proj2:", x2.shape, x2)
+            x = torch.cat([x, x2], dim=1)
+            # print("torch.cat([x, x2], dim=1):", x.shape)
+            x = self.fuser(x)
+            # print("fuser:", x.shape)
+            x = self.out_proj(x)
+            # print("out_proj:", x.shape)
+            pos = self.position_encoding(x).to(x.dtype)
+            # print("position_encoding:", pos.shape)
+            # sys.exit()
+            return {"vision_features": x, "vision_pos_enc": [pos]}
+        
         if self.only_pos:
             pos = self.position_encoding(pix_feat).to(pix_feat.dtype)
             return {"vision_features": pix_feat, "vision_pos_enc": [pos]}
