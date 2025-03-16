@@ -142,7 +142,7 @@ memory_attention= MemoryAttention(
 # # sys.exit()
 
 # Temporal encoding of the memories
-num_maskmem = 1
+num_maskmem = 2
 mem_dim = 128
 maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
@@ -180,8 +180,8 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_self_memory_encode.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler.pt"
 # output_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolom_s_num_maskmem_1_memory_position_0_no_mask_downsampler.yaml/checkpoints/checkpoint.pt"
-output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
-
+# output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
+output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
