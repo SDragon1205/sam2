@@ -116,7 +116,9 @@ class YOLOMBase(torch.nn.Module):
         temp_pos_enc: bool = True,
         # directly_use_no_mem_embed: bool = False,
         encode_first_frame: bool = False,
-        fuse_feature_and_memory: bool = False
+        # fuse_feature_and_memory: bool = False,
+        fuse_backbone_and_attention: bool = False,
+        fuse_backbone_and_bank: bool = False,
     ):
         super().__init__()
 
@@ -235,7 +237,8 @@ class YOLOMBase(torch.nn.Module):
         self.temp_pos_enc = temp_pos_enc
         # self.directly_use_no_mem_embed = directly_use_no_mem_embed
         self.encode_first_frame = encode_first_frame
-        self.fuse_feature_and_memory = fuse_feature_and_memory
+        self.fuse_backbone_and_attention = fuse_backbone_and_attention
+        self.fuse_backbone_and_bank = fuse_backbone_and_bank
 
     @property
     def device(self):
@@ -705,6 +708,10 @@ class YOLOMBase(torch.nn.Module):
                 # so we load it back to GPU (it's a no-op if it's already on GPU).
                 feats = prev["maskmem_features"].to(device, non_blocking=True)
                 to_cat_memory.append(feats.flatten(2).permute(2, 0, 1))
+                current_bank = None
+                if self.fuse_backbone_and_bank:
+                    current_bank = feats
+                    # print("current_bank:", current_bank.shape, current_bank[0][0][0][0])
                 # Spatial positional encoding (it might have been offloaded to CPU in eval)
                 maskmem_enc = prev["maskmem_pos_enc"][-1].to(device)
                 maskmem_enc = maskmem_enc.flatten(2).permute(2, 0, 1)
@@ -806,8 +813,12 @@ class YOLOMBase(torch.nn.Module):
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
                 pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
                 # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
+                current_bank = None
+                if self.fuse_backbone_and_bank:
+                    current_bank = pix_feat_with_mem
+                    # print("0 current_bank:", current_bank.shape, current_bank[0][0][0][0])
                 # sys.exit()
-                return pix_feat_with_mem
+                return pix_feat_with_mem, current_bank
             # elif self.directly_use_no_mem_embed:
             #     # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
             #     to_cat_memory = [self.no_mem_embed.expand(1, B, self.mem_dim)]
@@ -832,7 +843,7 @@ class YOLOMBase(torch.nn.Module):
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
         # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
         # sys.exit()
-        return pix_feat_with_mem
+        return pix_feat_with_mem, current_bank
 
     def _encode_new_memory(
         self,
@@ -846,7 +857,7 @@ class YOLOMBase(torch.nn.Module):
         """Encode the current image and its prediction into a memory feature."""
         C = self.hidden_dim
         H, W = feat_sizes[self.memory_position]
-        if self.recursive_memory and (not is_first_frame) and (not self.fuse_feature_and_memory):
+        if self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
             B = current_vision_feats.size(0)
             pix_feat = current_vision_feats
         else:
@@ -878,7 +889,7 @@ class YOLOMBase(torch.nn.Module):
             #     # apply sigmoid on the raw mask logits to turn them into range (0, 1)
             #     mask_for_mem = torch.sigmoid(pred_masks_high_res)
         if self.self_memory_encode:
-            if self.recursive_memory and self.fuse_feature_and_memory:
+            if self.recursive_memory and (self.fuse_backbone_and_attention or self.fuse_backbone_and_bank):
                 mask_for_mem = pred_masks_high_res
             else:
                 mask_for_mem = torch.tensor([0])
@@ -1013,6 +1024,7 @@ class YOLOMBase(torch.nn.Module):
             current_vision_feats_prepare=[current_vision_feats[0]]
             current_vision_pos_embeds_prepare=[current_vision_pos_embeds[0]]
             feat_sizes_prepare=[feat_sizes[0]]
+            # print("current_vision_feats_prepare:", current_vision_feats_prepare[0].shape)#, current_vision_feats_prepare[0][0][0][0][0])
         elif self.memory_position == 1: 
             current_vision_feats_prepare=[current_vision_feats[1]]
             current_vision_pos_embeds_prepare=[current_vision_pos_embeds[1]]
@@ -1026,7 +1038,7 @@ class YOLOMBase(torch.nn.Module):
         # print("feat_sizes_prepare:", feat_sizes_prepare[0])
         # sys.exit()
 
-        pix_feat = self._prepare_memory_conditioned_features(
+        pix_feat, current_bank = self._prepare_memory_conditioned_features(
             frame_idx=frame_idx,
             is_init_cond_frame=is_init_cond_frame,
             current_vision_feats=current_vision_feats_prepare,
@@ -1051,7 +1063,7 @@ class YOLOMBase(torch.nn.Module):
         # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
         # print("torch.equal(pix_feat, pix_feat_clone):", torch.equal(pix_feat, pix_feat_clone))
         # sys.exit()
-        return yolo_outputs, high_res_features, pix_feat
+        return yolo_outputs, high_res_features, pix_feat, current_bank
 
     def visualize_output_tensor(self, output_tensor, batch_idx=0):
             """
@@ -1206,6 +1218,7 @@ class YOLOMBase(torch.nn.Module):
         img_ids,
         init_cond_frames_gt,
         recursive_pix_feat,
+        current_bank,
         is_first_frame = False,
     ):
         if run_mem_encoder and self.num_maskmem > 0:
@@ -1214,8 +1227,10 @@ class YOLOMBase(torch.nn.Module):
             # else:
             # print("yolo_outputs[0].device:", yolo_outputs[0].device)
             if self.self_memory_encode:
-                if self.recursive_memory and self.fuse_feature_and_memory:
+                if self.recursive_memory and self.fuse_backbone_and_attention:
                     high_res_masks_for_mem_enc = recursive_pix_feat
+                elif self.recursive_memory and self.fuse_backbone_and_bank:
+                    high_res_masks_for_mem_enc = current_bank
                 else:
                     high_res_masks_for_mem_enc = None
             elif init_cond_frames_gt is not None:#self.use_gt_in_first_frame:
@@ -1235,7 +1250,7 @@ class YOLOMBase(torch.nn.Module):
             # print("current_vision_feats:", pix_feat.shape, pix_feat)
             # print("recursive_pix_feat:", recursive_pix_feat[0].shape, recursive_pix_feat[0])
             # sys.exit()
-            if self.recursive_memory and (not is_first_frame) and (not self.fuse_feature_and_memory):
+            if self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
                 # print("_encode_new_memory:", recursive_pix_feat.shape, recursive_pix_feat)
                 maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                     current_vision_feats=recursive_pix_feat,

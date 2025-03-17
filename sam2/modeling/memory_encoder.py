@@ -189,8 +189,9 @@ class MemoryEncoder(nn.Module):
         skip_mask_sigmoid: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.two_proj:
-            # print("pix_feat:", pix_feat.shape, pix_feat)
-            # print("masks:", masks.shape, masks)
+            # print("two_proj")
+            # print("pix_feat:", pix_feat.shape, pix_feat[0][0][0][0])
+            # print("masks:", masks.shape, masks[0][0][0][0])
             x = self.pix_feat_proj(pix_feat)
             # print("pix_feat_proj:", x.shape, x)
             x2 = self.pix_feat_proj2(masks)

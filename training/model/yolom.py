@@ -146,32 +146,32 @@ class YOLOMTrain(YOLOMBase):
         # sys.exit()
         return previous_stages_out
 
-    def _prepare_backbone_features_per_frame(self, img_batch, img_ids):
-        """Compute the image backbone features on the fly for the given img_ids."""
-        # Only forward backbone on unique image ids to avoid repetitive computation
-        # (if `img_ids` has only one element, it's already unique so we skip this step).
-        if img_ids.numel() > 1:
-            unique_img_ids, inv_ids = torch.unique(img_ids, return_inverse=True)
-        else:
-            unique_img_ids, inv_ids = img_ids, None
+    # def _prepare_backbone_features_per_frame(self, img_batch, img_ids):
+    #     """Compute the image backbone features on the fly for the given img_ids."""
+    #     # Only forward backbone on unique image ids to avoid repetitive computation
+    #     # (if `img_ids` has only one element, it's already unique so we skip this step).
+    #     if img_ids.numel() > 1:
+    #         unique_img_ids, inv_ids = torch.unique(img_ids, return_inverse=True)
+    #     else:
+    #         unique_img_ids, inv_ids = img_ids, None
 
-        # Compute the image features on those unique image ids
-        image = img_batch[unique_img_ids]
-        backbone_out = self.forward_image(image)
-        (
-            _,
-            vision_feats,
-            vision_pos_embeds,
-            feat_sizes,
-        ) = self._prepare_backbone_features(backbone_out)
-        # Inverse-map image features for `unique_img_ids` to the final image features
-        # for the original input `img_ids`.
-        if inv_ids is not None:
-            image = image[inv_ids]
-            vision_feats = [x[:, inv_ids] for x in vision_feats]
-            vision_pos_embeds = [x[:, inv_ids] for x in vision_pos_embeds]
+    #     # Compute the image features on those unique image ids
+    #     image = img_batch[unique_img_ids]
+    #     backbone_out = self.forward_image(image)
+    #     (
+    #         _,
+    #         vision_feats,
+    #         vision_pos_embeds,
+    #         feat_sizes,
+    #     ) = self._prepare_backbone_features(backbone_out)
+    #     # Inverse-map image features for `unique_img_ids` to the final image features
+    #     # for the original input `img_ids`.
+    #     if inv_ids is not None:
+    #         image = image[inv_ids]
+    #         vision_feats = [x[:, inv_ids] for x in vision_feats]
+    #         vision_pos_embeds = [x[:, inv_ids] for x in vision_pos_embeds]
 
-        return image, vision_feats, vision_pos_embeds, feat_sizes
+    #     return image, vision_feats, vision_pos_embeds, feat_sizes
 
     def prepare_prompt_inputs(self, backbone_out, input, start_frame_idx=0):
         """
@@ -478,18 +478,20 @@ class YOLOMTrain(YOLOMBase):
             if img_feats_already_computed:
                 # Retrieve image features according to img_ids (if they are already computed).
                 current_vision_feats = [x[:, img_ids] for x in vision_feats]
+                # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
             else:
-                # Otherwise, compute the image features on the fly for the given img_ids
-                # (this might be used for evaluation on long videos to avoid backbone OOM).
-                (
-                    _,
-                    current_vision_feats,
-                    current_vision_pos_embeds,
-                    feat_sizes,
-                ) = self._prepare_backbone_features_per_frame(
-                    input.flat_img_batch, img_ids
-                )
+                raise ValueError(f"img_feats_already_computed is False")
+                # # Otherwise, compute the image features on the fly for the given img_ids
+                # # (this might be used for evaluation on long videos to avoid backbone OOM).
+                # (
+                #     _,
+                #     current_vision_feats,
+                #     current_vision_pos_embeds,
+                #     feat_sizes,
+                # ) = self._prepare_backbone_features_per_frame(
+                #     input.flat_img_batch, img_ids
+                # )
 
             # Get output masks based on this frame's prompts and previous memory
             yolo_outputs, current_out = self.track_step(
@@ -606,13 +608,14 @@ class YOLOMTrain(YOLOMBase):
                 img_ids,
                 init_cond_frames_gt,
                 None,
+                None,
                 is_first_frame=True,
             )
             output_dict["non_cond_frame_outputs"][-1] = current_out
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
-        yolo_outputs, high_res_features, pix_feat = self._track_step(
+        yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
             frame_idx,
             is_init_cond_frame,
             current_vision_feats,
@@ -705,6 +708,7 @@ class YOLOMTrain(YOLOMBase):
                 img_ids,
                 init_cond_frames_gt,
                 pix_feat,
+                current_bank,
             )
         else:
             current_out = None
