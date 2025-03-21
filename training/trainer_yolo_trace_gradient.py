@@ -240,7 +240,7 @@ class LoggingConf:
     log_batch_stats: bool = False
 
 
-class Trainer_yolo:
+class Trainer_yolo_trace_gradient:
     """
     Trainer supporting the DDP training strategies.
     """
@@ -568,7 +568,7 @@ class Trainer_yolo:
         model: nn.Module,
         phase: str,
     ):
-        outputs = model(batch)
+        outputs, output_dict, first_backbone_feature = model(batch)
         # print("after input.gtdata:", batch.gtdata)
         # sys.exit()
         # print("outputs:", outputs[0].shape, outputs[1].shape, outputs[2].shape)
@@ -648,7 +648,7 @@ class Trainer_yolo:
         # self.validator.finalize_metrics()
         # self.validator.print_results()
         # sys.exit()
-        # return {loss_str: loss}, batch_size, step_losses, output_dict
+        return {loss_str: loss}, batch_size, step_losses, output_dict, first_backbone_feature
         return ret_tuple
 
     def run(self):
@@ -1084,7 +1084,7 @@ class Trainer_yolo:
             enabled=self.optim_conf.amp.enabled,
             dtype=get_amp_type(self.optim_conf.amp.amp_dtype),
         ):
-            loss_dict, batch_size, extra_losses = self._step(
+            loss_dict, batch_size, extra_losses, output_dict, first_backbone_feature = self._step(
                 batch,
                 self.model,
                 phase,
@@ -1105,35 +1105,65 @@ class Trainer_yolo:
                 raise FloatingPointError(error_msg)
             else:
                 return
-        # def trace_tensors_into_dot(loss, tensor_dict, filename="grad_graph"):
-        #     """
-        #     Add named intermediate tensors into the computation graph for visualization.
+        def trace_tensors_into_dot(loss, tensor_dict, filename="grad_graph"):
+            """
+            Add named intermediate tensors into the computation graph for visualization.
 
-        #     Args:
-        #         loss (Tensor): final loss tensor that connects the graph
-        #         tensor_dict (Dict[str, Tensor]): mapping from name to tensor
-        #         filename (str): output filename (without extension)
+            Args:
+                loss (Tensor): final loss tensor that connects the graph
+                tensor_dict (Dict[str, Tensor]): mapping from name to tensor
+                filename (str): output filename (without extension)
 
-        #     Returns:
-        #         graphviz.Digraph object
-        #     """
-        #     assert isinstance(tensor_dict, dict), "tensor_dict must be a dict of {name: tensor}"
+            Returns:
+                graphviz.Digraph object
+            """
+            assert isinstance(tensor_dict, dict), "tensor_dict must be a dict of {name: tensor}"
 
-        #     trace_params = {}
-        #     for name, tensor in tensor_dict.items():
-        #         if not tensor.requires_grad:
-        #             tensor = tensor.detach().requires_grad_(True)
-        #         # force link to loss so it's visible in the graph
-        #         loss = loss + 0.0 * tensor.sum()
-        #         trace_params[name] = tensor
+            trace_params = {}
+            for name, tensor in tensor_dict.items():
+                # if not tensor.requires_grad:
+                tensor = tensor.detach().requires_grad_(True)
+                # force link to loss so it's visible in the graph
+                print(f"{name}.requires_grad:", tensor.requires_grad)
+                print(f"{name}.is_leaf:", tensor.is_leaf)
+                loss = loss + 0.0 * tensor.sum()
+                trace_params[name] = tensor
 
-        #     dot = make_dot(loss, params=trace_params, show_attrs=True, show_saved=True)
-        #     dot.render(filename, format="png")
-        #     return dot
+            dot = make_dot(loss, params=trace_params, show_attrs=True, show_saved=True)
+            dot.render("grad_graph/"+filename, format="png")
+            return dot
+        def trace_tensor_origin(tensor, name="tensor", filename="origin_graph"):
+            """
+            Generate a computation graph from a given tensor backward to its origin.
 
+            Args:
+                tensor (Tensor): The tensor to trace from
+                name (str): Label name for the tensor
+                filename (str): Output file name (without extension)
+
+            Returns:
+                graphviz.Digraph
+            """
+            assert tensor.grad_fn is not None, f"Tensor {name} has no grad_fn, it is a leaf or detached."
+            
+            dot = make_dot(tensor.sum(), params={name: tensor})
+            dot.render("grad_graph/"+filename, format="png")
+            return dot
+        # print("first_backbone_feature:", type(first_backbone_feature))
+        # first_frame_feat = first_frame_feat.detach().requires_grad_(True)
+        # print("first_frame_feat.requires_grad:", first_frame_feat.requires_grad)
+        # print("first_frame_feat.is_leaf:", first_frame_feat.is_leaf)
+
+        # memory_named = {
+        #     f"first_backbone_feature": first_backbone_feature,
+        #     f"memory_feat_{1}": output_dict["non_cond_frame_outputs"][1]["maskmem_features"]
+        #     # f"memory_feat_{i}": output_dict["non_cond_frame_outputs"][i]["maskmem_features"]
+        #     # for i in range(len(output_dict["non_cond_frame_outputs"]))
+        # }
+        # trace_tensors_into_dot(loss, memory_named, filename="grad_graph_with_memory")
         # print("output_dict:", output_dict)
-        # for i in range(len(output_dict['non_cond_frame_outputs'])):
-        #     print(f"memory_feat_{i} grad_fn:", output_dict['non_cond_frame_outputs'][i]["maskmem_features"].grad_fn)
+        for i in range(len(output_dict['non_cond_frame_outputs'])):
+            print(f"memory_feat_{i} grad_fn:", output_dict['non_cond_frame_outputs'][i]["maskmem_features"].grad_fn)
         # memory_named = {
         #     f"memory_feat_{i}": output_dict['non_cond_frame_outputs'][i]["maskmem_features"]
         #     for i in range(len(output_dict))
@@ -1150,7 +1180,11 @@ class Trainer_yolo:
 
         # dot = make_dot(loss, params={**dict(self.model.named_parameters()), **memory_named}, show_attrs=True, show_saved=True)#dict(self.model.named_parameters()))
         # dot.render("grad_graph", format="png")#.view()
-        # sys.exit()
+        tensor = output_dict["non_cond_frame_outputs"][0]["maskmem_features"].detach().requires_grad_(True)
+        memory_named = {f"memory_feat_{0}": tensor}
+        dot = make_dot(tensor.sum(), params={**dict(self.model.named_parameters()), **memory_named}, show_attrs=True, show_saved=True)#dict(self.model.named_parameters()))
+        dot.render("grad_graph/grad_graph", format="png")#.view()
+        sys.exit()
         self.scaler.scale(loss).backward()
         # sys.exit()
         loss_mts[loss_key].update(loss.item(), batch_size)

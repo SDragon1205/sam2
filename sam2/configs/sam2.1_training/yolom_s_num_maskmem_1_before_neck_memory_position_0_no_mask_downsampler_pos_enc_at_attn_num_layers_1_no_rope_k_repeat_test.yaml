@@ -1,9 +1,8 @@
 # @package _global_
 
 scratch:
-  mode: val #val #train # train_only
-  fuse_backbone_and_bank: True
-  recursive_memory: True
+  mode: train #val #train # train_only
+  trace_gradient: True
   temp_pos_enc: False
   init_cond_frames_mode: 1
   self_memory_encode: True
@@ -190,7 +189,7 @@ vos_val:
 #           std: [0.229, 0.224, 0.225]
 
 trainer:
-  _target_: training.trainer_yolo.Trainer_yolo
+  _target_: training.trainer_yolo_trace_gradient.Trainer_yolo_trace_gradient
   mode: ${scratch.mode} #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
@@ -287,17 +286,15 @@ trainer:
           _target_: sam2.modeling.memory_encoder.Fuser
           layer:
             _target_: sam2.modeling.memory_encoder.CXBlock
-            dim: 256
+            dim: 128
             kernel_size: 7
             padding: 3
             layer_scale_init_value: 1e-6
             use_dwconv: True  # depth-wise convs
           num_layers: 2
         in_dim: 128
-        # no_mask_downsampler: True
+        no_mask_downsampler: True
         # only_pos: True
-        two_proj: True
-        # proj_dim: 128
 
     num_maskmem: 1
     image_size: ${scratch.resolution}
@@ -370,9 +367,7 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    recursive_memory: ${scratch.recursive_memory}
-    fuse_backbone_and_bank: ${scratch.fuse_backbone_and_bank}
-
+    trace_gradient: ${scratch.trace_gradient}
   validator:
     _target_: training.validator.maP50_Validator
     save_dir: "./maP50"
@@ -589,7 +584,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_fuse_fam_attentionlayer_1.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

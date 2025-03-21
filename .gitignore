@@ -11,3 +11,4 @@ checkpoints/*.pt
 demo/backend/checkpoints/*.pt
 sam2_logs/*
 tmp/*
+grad_graph/*

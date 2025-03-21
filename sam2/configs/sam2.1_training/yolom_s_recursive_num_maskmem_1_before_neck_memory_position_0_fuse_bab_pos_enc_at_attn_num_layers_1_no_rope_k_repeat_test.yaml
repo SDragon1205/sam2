@@ -1,7 +1,8 @@
 # @package _global_
 
 scratch:
-  mode: val #val #train # train_only
+  mode: train #val #train # train_only
+  trace_gradient: True
   fuse_backbone_and_bank: True
   recursive_memory: True
   temp_pos_enc: False
@@ -15,11 +16,11 @@ scratch:
   memory_before_neck: True
   mask_for_mem_sigmoid: False
   use_gt_in_first_frame: False
-  skip_first_frame: True
+  skip_first_frame: False
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
-  train_num_frames: 20
+  train_num_frames: 4
   val_num_frames: 10
   max_num_objects: 3
   base_lr: 5.0e-6
@@ -190,7 +191,7 @@ vos_val:
 #           std: [0.229, 0.224, 0.225]
 
 trainer:
-  _target_: training.trainer_yolo.Trainer_yolo
+  _target_: training.trainer_yolo_trace_gradient.Trainer_yolo_trace_gradient
   mode: ${scratch.mode} #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
@@ -372,6 +373,7 @@ trainer:
     temp_pos_enc: ${scratch.temp_pos_enc}
     recursive_memory: ${scratch.recursive_memory}
     fuse_backbone_and_bank: ${scratch.fuse_backbone_and_bank}
+    trace_gradient: ${scratch.trace_gradient}
 
   validator:
     _target_: training.validator.maP50_Validator

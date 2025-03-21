@@ -119,6 +119,7 @@ class YOLOMBase(torch.nn.Module):
         # fuse_feature_and_memory: bool = False,
         fuse_backbone_and_attention: bool = False,
         fuse_backbone_and_bank: bool = False,
+        trace_gradient: bool = False,
     ):
         super().__init__()
 
@@ -239,7 +240,7 @@ class YOLOMBase(torch.nn.Module):
         self.encode_first_frame = encode_first_frame
         self.fuse_backbone_and_attention = fuse_backbone_and_attention
         self.fuse_backbone_and_bank = fuse_backbone_and_bank
-
+        self.trace_gradient = trace_gradient
     @property
     def device(self):
         return next(self.parameters()).device
@@ -691,6 +692,7 @@ class YOLOMBase(torch.nn.Module):
                 # print("prev_frame_idx:", prev_frame_idx)
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
                 # print("out:", out)
+                # out["maskmem_features"].name = f"memory_{prev_frame_idx}"
                 # sys.exit()
                 if out is None:
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)

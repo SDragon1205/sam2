@@ -23,6 +23,7 @@ from training.utils.data_utils import BatchedVideoDatapoint_yolo
 import sys
 from PIL import Image
 from ultralytics import YOLO
+from torchviz import make_dot
 
 class YOLOMTrain(YOLOMBase):
     def __init__(
@@ -478,6 +479,8 @@ class YOLOMTrain(YOLOMBase):
             if img_feats_already_computed:
                 # Retrieve image features according to img_ids (if they are already computed).
                 current_vision_feats = [x[:, img_ids] for x in vision_feats]
+                if self.trace_gradient and stage_id == 0:
+                    first_backbone_feature = current_vision_feats[0]
                 # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
             else:
@@ -523,6 +526,16 @@ class YOLOMTrain(YOLOMBase):
                 elif not self.has_cond_frame_outputs:
                     output_dict["non_cond_frame_outputs"][stage_id] = current_out
                     # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id])
+                    # print("len(output_dict[non_cond_frame_outputs]):", len(output_dict["non_cond_frame_outputs"]))
+
+                    trace_id = 3
+                    if self.trace_gradient and stage_id == trace_id:
+                        tensor = output_dict["non_cond_frame_outputs"][trace_id]["maskmem_features"]
+                        memory_named = {f"memory_feat_{trace_id}": tensor}
+                        #yolo, memory_attention, memory_encoder
+                        dot = make_dot(tensor.sum(), params={**dict(self.yolo.named_parameters()), **dict(self.memory_attention.named_parameters()), **dict(self.memory_encoder.named_parameters()), **memory_named}, show_attrs=True, show_saved=True)#dict(self.model.named_parameters()))
+                        dot.render(f"grad_graph/grad_graph_{trace_id}_no_recursive", format="png")#.view()
+                        sys.exit()
                 else:
                     if add_output_as_cond_frame:
                         output_dict["cond_frame_outputs"][stage_id] = current_out
@@ -573,7 +586,8 @@ class YOLOMTrain(YOLOMBase):
             # print("\nAfter:")
             # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
             # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
-
+        if self.trace_gradient:
+            return all_frame_outputs, output_dict, first_backbone_feature
         return all_frame_outputs
 
     def track_step(
