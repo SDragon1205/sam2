@@ -2,7 +2,7 @@
 
 scratch:
   mode: val #val #train # train_only
-  temp_pos_enc: False
+  temp_pos_enc: True
   init_cond_frames_mode: 1
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
@@ -255,7 +255,7 @@ trainer:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
           feat_sizes: [80, 80]
-          # rope_k_repeat: True
+          rope_k_repeat: True
           embedding_dim: 128
           num_heads: 1
           downsample_rate: 1

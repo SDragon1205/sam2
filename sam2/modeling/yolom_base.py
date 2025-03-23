@@ -120,6 +120,8 @@ class YOLOMBase(torch.nn.Module):
         fuse_backbone_and_attention: bool = False,
         fuse_backbone_and_bank: bool = False,
         trace_gradient: bool = False,
+        skip_first_frame: bool = False,
+        select_frame: int = 0,
     ):
         super().__init__()
 
@@ -241,6 +243,8 @@ class YOLOMBase(torch.nn.Module):
         self.fuse_backbone_and_attention = fuse_backbone_and_attention
         self.fuse_backbone_and_bank = fuse_backbone_and_bank
         self.trace_gradient = trace_gradient
+        self.skip_first_frame = skip_first_frame
+        self.select_frame = select_frame
     @property
     def device(self):
         return next(self.parameters()).device
@@ -691,6 +695,7 @@ class YOLOMBase(torch.nn.Module):
                 # print(f"t_pos, prev_frame_idx:, {t_pos}, {prev_frame_idx}")
                 # print("prev_frame_idx:", prev_frame_idx)
                 out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
+                # print("prev_frame_idx:", prev_frame_idx)
                 # print("out:", out)
                 # out["maskmem_features"].name = f"memory_{prev_frame_idx}"
                 # sys.exit()
@@ -699,7 +704,8 @@ class YOLOMBase(torch.nn.Module):
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
                 t_pos_and_prevs.append((t_pos, out))
-                # print("out['maskmem_features']:", out['maskmem_features'][0].shape)
+                # if out != None:
+                #     print(f"{t_pos}, out['maskmem_features']: {out['maskmem_features'][0].shape}, {out['maskmem_features'][0][0][0][0]}")
                 # print("out['maskmem_pos_enc']:", out['maskmem_pos_enc'][0].shape)
             # print("t_pos_and_prevs:", t_pos_and_prevs)
 
@@ -719,6 +725,7 @@ class YOLOMBase(torch.nn.Module):
                 maskmem_enc = maskmem_enc.flatten(2).permute(2, 0, 1)
                 # Temporal positional encoding
                 if self.temp_pos_enc:  
+                    # print(f"{t_pos}, self.temp_pos_enc:", self.num_maskmem - t_pos - 1)
                     maskmem_enc = (
                         maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                     )

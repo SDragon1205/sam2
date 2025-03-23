@@ -288,19 +288,28 @@ class RoPEAttention(Attention):
         # Apply rotary position encoding
         w = h = math.sqrt(q.shape[-2])
         self.freqs_cis = self.freqs_cis.to(q.device)
+        # print("before self.freqs_cis:", self.freqs_cis.shape)
         if self.freqs_cis.shape[0] != q.shape[-2]:
+            # print("self.freqs_cis.shape[0] != q.shape[-2]")
             self.freqs_cis = self.compute_cis(end_x=w, end_y=h).to(q.device)
+            # print("after self.freqs_cis:", self.freqs_cis.shape)
         if q.shape[-2] != k.shape[-2]:
             assert self.rope_k_repeat
 
         num_k_rope = k.size(-2) - num_k_exclude_rope
+        # print("num_k_rope:", num_k_rope)
+        # print("q:", q.shape)
+        # print("k:", k.shape)
+        # print("k[:, :, :num_k_rope]", k[:, :, :num_k_rope].shape)
         q, k[:, :, :num_k_rope] = apply_rotary_enc(
             q,
             k[:, :, :num_k_rope],
             freqs_cis=self.freqs_cis,
             repeat_freqs_k=self.rope_k_repeat,
         )
-
+        # print("after q:", q.shape)
+        # print("after k:", k.shape)
+        # print("after v:", v.shape)
         dropout_p = self.dropout_p if self.training else 0.0
         # Attention
         out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)

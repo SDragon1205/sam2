@@ -338,7 +338,7 @@ class Trainer_yolo:
         """
         self.start_time = time.time()
         self.ckpt_time_elapsed = 0
-        self.est_epoch_time = dict.fromkeys([Phase.TRAIN, Phase.VAL], 0)
+        self.est_epoch_time = dict.fromkeys([Phase.TRAIN, Phase.VAL, Phase.TEST], 0)
 
     def _get_meters(self, phase_filters=None):
         if self.meters is None:
@@ -607,7 +607,7 @@ class Trainer_yolo:
                 loss, loss_log_str, self.steps[phase]
             )
 
-        if self.mode == "train" or self.mode == "train_only":
+        if self.mode == "train" or self.mode == "train_only" or self.mode == "train2":
             if self.steps[phase] % self.logging_conf.log_scalar_frequency == 0:
                 self.logger.log(
                     loss_log_str,
@@ -652,8 +652,9 @@ class Trainer_yolo:
         return ret_tuple
 
     def run(self):
-        assert self.mode in ["train", "train_only", "val"]
+        assert self.mode in ["train", "train_only", "val", "train2"]
         self.val_best_map50 = 0
+        self.test_best_map50 = 0
         if self.mode == "train":
             if self.epoch > 0:
                 logging.info(f"Resuming training from epoch: {self.epoch}")
@@ -669,17 +670,34 @@ class Trainer_yolo:
             self.run_val()
         elif self.mode == "train_only":
             self.run_train()
+        elif self.mode == "train2":
+            if self.epoch > 0:
+                logging.info(f"Resuming training from epoch: {self.epoch}")
+                # resuming from a checkpoint
+                if self.is_intermediate_val_epoch(self.epoch - 1):
+                    logging.info("Running previous val epoch")
+                    self.epoch -= 1
+                    self.run_val()
+                    self.run_test()
+                    self.epoch += 1
+            self.run_train()
+            self.run_val()
+            self.run_test()
 
     def _setup_dataloaders(self):
         self.train_dataset = None
         self.val_dataset = None
+        self.test_dataset = None
 
-        if self.mode in ["train", "val"]:
+        if self.mode in ["train", "val", "train2"]:
             self.val_dataset = instantiate(self.data_conf.get(Phase.VAL, None))
             # print("self.val_dataset:", self.val_dataset)
             # sys.exit()
-        if self.mode in ["train", "train_only"]:
+        if self.mode in ["train", "train_only", "train2"]:
             self.train_dataset = instantiate(self.data_conf.train)
+        
+        if self.mode in ["train2"]:
+            self.test_dataset = instantiate(self.data_conf.get(Phase.TEST, None))
 
     def run_train(self):
         # for name, param in self.model.module.yolo.named_parameters():
@@ -734,7 +752,7 @@ class Trainer_yolo:
         outs = self.val_epoch(dataloader, phase=Phase.VAL)
         del dataloader
         gc.collect()
-        if self.mode == "train":
+        if self.mode == "train" or self.mode == "train2":
             self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0
 
         if self.distributed_rank == 0:
@@ -785,6 +803,7 @@ class Trainer_yolo:
         self.validator.init_metrics()
 
         for data_iter, batch in enumerate(val_loader):
+            # self.validator.init_metrics()
             # visualize_batched_video(batch)
             # measure data loading time
             data_time.update(time.time() - end)
@@ -833,11 +852,15 @@ class Trainer_yolo:
 
             if data_iter % self.logging_conf.log_freq == 0:
                 progress.display(data_iter)
+                # stats = self.validator.get_stats()
+                # self.validator.check_stats(stats)
+                # self.validator.finalize_metrics()
+                # self.validator.print_results()
 
             if data_iter % self.logging_conf.log_scalar_frequency == 0:
                 # Log progress meters.
                 for progress_meter in progress.meters:
-                    if self.mode == "train":
+                    if self.mode == "train" or self.mode == "train2":
                         self.logger.log(
                             os.path.join("Step_Stats", phase, progress_meter.name),
                             progress_meter.val,
@@ -889,6 +912,194 @@ class Trainer_yolo:
                 elif self.epoch < 90:
                     self.save_checkpoint(self.epoch + 1)
                     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
+        elif self.mode == "train2":
+            self.logger.log(f"Metrics/val_Images", seen, self.epoch)
+            self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
+            self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
+            self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
+            self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
+            self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
+            # if self.epoch == 70 or self.epoch == 90:
+            #     self.val_best_map50 = 0
+            if result2 > self.val_best_map50:
+                self.save_checkpoint(self.epoch + 1, ["best_val"])
+                # self.save_checkpoint(self.epoch + 1)
+                self.val_best_map50 = result2
+                # if self.epoch < 70:
+                #     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
+                # elif self.epoch < 90:
+                #     self.save_checkpoint(self.epoch + 1)
+                #     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
+        return out_dict
+
+    def run_test(self):
+        if not self.test_dataset:
+            return
+
+        dataloader = self.test_dataset.get_loader(epoch=int(self.epoch))
+        outs = self.test_epoch(dataloader, phase=Phase.TEST)
+        del dataloader
+        gc.collect()
+        if self.mode == "train" or self.mode == "train2":
+            self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0
+
+        if self.distributed_rank == 0:
+            with g_pathmgr.open(
+                os.path.join(self.logging_conf.log_dir, "test_stats.json"),
+                "a",
+            ) as f:
+                f.write(json.dumps(outs) + "\n")
+
+    def test_epoch(self, test_loader, phase):
+        batch_time = AverageMeter("Batch Time", self.device, ":.2f")
+        data_time = AverageMeter("Data Time", self.device, ":.2f")
+        mem = MemMeter("Mem (GB)", self.device, ":.2f")
+
+        iters_per_epoch = len(test_loader)
+
+        curr_phases = [phase]
+        curr_models = [self.model]
+
+        loss_names = []
+        for p in curr_phases:
+            for key in self.loss.keys():
+                loss_names.append(f"Losses/{p}_{key}_loss")
+
+        loss_mts = OrderedDict(
+            [(name, AverageMeter(name, self.device, ":.2e")) for name in loss_names]
+        )
+        extra_loss_mts = {}
+
+        for model in curr_models:
+            model.eval()
+            if hasattr(unwrap_ddp_if_wrapped(model), "on_validation_epoch_start"):
+                unwrap_ddp_if_wrapped(model).on_validation_epoch_start()
+
+        progress = ProgressMeter(
+            iters_per_epoch,
+            [batch_time, data_time, mem, self.time_elapsed_meter, *loss_mts.values()],
+            self._get_meters(curr_phases),
+            prefix="Test Epoch: [{}]".format(self.epoch),
+        )
+
+        end = time.time()
+
+        # print("self.loss:", self.loss)
+        # self.loss["test"].loss.device = self.device
+        # self.loss["test"].loss.bbox_loss = self.loss["test"].loss.bbox_loss.to(self.device)
+        # self.loss["test"].loss.proj = self.loss["test"].loss.proj.to(self.device)
+        self.validator.init_metrics()
+
+        for data_iter, batch in enumerate(test_loader):
+            # self.validator.init_metrics()
+            # visualize_batched_video(batch)
+            # measure data loading time
+            data_time.update(time.time() - end)
+
+            batch = batch.to(self.device, non_blocking=True)
+            # print("batch:", batch)
+            # sys.exit()
+            # compute output
+            with torch.no_grad():
+                # with torch.cuda.amp.autocast(
+                with torch.amp.autocast('cuda',
+                    enabled=(self.optim_conf.amp.enabled if self.optim_conf else False),
+                    dtype=(
+                        get_amp_type(self.optim_conf.amp.amp_dtype)
+                        if self.optim_conf
+                        else None
+                    ),
+                ):
+                    for phase, model in zip(curr_phases, curr_models):
+                        loss_dict, batch_size, extra_losses = self._step(
+                            batch,
+                            model,
+                            phase,
+                        )
+
+                        assert len(loss_dict) == 1
+                        loss_key, loss = loss_dict.popitem()
+
+                        loss_mts[loss_key].update(loss.item(), batch_size)
+
+                        for k, v in extra_losses.items():
+                            if k not in extra_loss_mts:
+                                extra_loss_mts[k] = AverageMeter(k, self.device, ":.2e")
+                            extra_loss_mts[k].update(v.item(), batch_size)
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            self.time_elapsed_meter.update(
+                time.time() - self.start_time + self.ckpt_time_elapsed
+            )
+
+            if torch.cuda.is_available():
+                mem.update(reset_peak_usage=True)
+
+            if data_iter % self.logging_conf.log_freq == 0:
+                progress.display(data_iter)
+                # stats = self.validator.get_stats()
+                # self.validator.check_stats(stats)
+                # self.validator.finalize_metrics()
+                # self.validator.print_results()
+
+            if data_iter % self.logging_conf.log_scalar_frequency == 0:
+                # Log progress meters.
+                for progress_meter in progress.meters:
+                    if self.mode == "train" or self.mode == "train2":
+                        self.logger.log(
+                            os.path.join("Step_Stats", phase, progress_meter.name),
+                            progress_meter.test,
+                            self.steps[Phase.TEST],
+                        )
+
+            if data_iter % 10 == 0:
+                dist.barrier()
+
+        self.est_epoch_time[phase] = batch_time.avg * iters_per_epoch
+        self._log_timers(phase)
+        for model in curr_models:
+            if hasattr(unwrap_ddp_if_wrapped(model), "on_validation_epoch_end"):
+                unwrap_ddp_if_wrapped(model).on_validation_epoch_end()
+
+        out_dict = self._log_meters_and_save_best_ckpts(curr_phases)
+
+        for k, v in loss_mts.items():
+            out_dict[k] = v.avg
+        for k, v in extra_loss_mts.items():
+            out_dict[k] = v.avg
+
+        for phase in curr_phases:
+            out_dict.update(self._get_trainer_state(phase))
+        self._reset_meters(curr_phases)
+        logging.info(f"Meters: {out_dict}")
+
+        stats = self.validator.get_stats()
+        self.validator.check_stats(stats)
+        self.validator.finalize_metrics()
+        # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
+
+        seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
+        if self.mode == "train" or self.mode == "train2":
+            self.logger.log(f"Metrics/test_Images", seen, self.epoch)
+            self.logger.log(f"Metrics/test_Instances", nt_per_class, self.epoch)
+            self.logger.log(f"Metrics/test_Precision", result0, self.epoch)
+            self.logger.log(f"Metrics/test_Recall", result1, self.epoch)
+            self.logger.log(f"Metrics/test_mAP50", result2, self.epoch)
+            self.logger.log(f"Metrics/test_mAP50-95", result3, self.epoch)
+            # if self.epoch == 70 or self.epoch == 90:
+            #     self.test_best_map50 = 0
+            if result2 > self.test_best_map50:
+                self.save_checkpoint(self.epoch + 1, ["test_best"])
+                # self.save_checkpoint(self.epoch + 1)
+                self.test_best_map50 = result2
+                # if self.epoch < 70:
+                #     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
+                # elif self.epoch < 90:
+                #     self.save_checkpoint(self.epoch + 1)
+                #     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
         
         return out_dict
 
@@ -1226,27 +1437,27 @@ class Trainer_yolo:
         for meter in self._get_meters(phases).values():
             meter.reset()
 
-    def _check_val_key_match(self, val_keys, phase):
+    def _check_val_key_match(self, val_keys, phase, mode):
         if val_keys is not None:
             # Check if there are any duplicates
             assert len(val_keys) == len(
                 set(val_keys)
-            ), f"Duplicate keys in val datasets, keys: {val_keys}"
+            ), f"Duplicate keys in {mode} datasets, keys: {val_keys}"
 
             # Check that the keys match the meter keys
             if self.meters_conf is not None and phase in self.meters_conf:
                 assert set(val_keys) == set(self.meters_conf[phase].keys()), (
-                    f"Keys in val datasets do not match the keys in meters."
+                    f"Keys in {mode} datasets do not match the keys in meters."
                     f"\nMissing in meters: {set(val_keys) - set(self.meters_conf[phase].keys())}"
-                    f"\nMissing in val datasets: {set(self.meters_conf[phase].keys()) - set(val_keys)}"
+                    f"\nMissing in {mode} datasets: {set(self.meters_conf[phase].keys()) - set(val_keys)}"
                 )
 
             if self.loss_conf is not None:
                 loss_keys = set(self.loss_conf.keys()) - set(["all"])
                 assert all([k in loss_keys for k in val_keys]), (
-                    f"Keys in val datasets do not match the keys in losses."
+                    f"Keys in {mode} datasets do not match the keys in losses."
                     f"\nMissing in losses: {set(val_keys) - loss_keys}"
-                    f"\nMissing in val datasets: {loss_keys - set(val_keys)}"
+                    f"\nMissing in {mode} datasets: {loss_keys - set(val_keys)}"
                 )
 
     def _setup_components(self):
@@ -1257,11 +1468,18 @@ class Trainer_yolo:
         if self.data_conf.get(val_phase, None) is not None:
             val_keys = collect_dict_keys(self.data_conf[val_phase])
         # Additional checks on the sanity of the config for val datasets
-        self._check_val_key_match(val_keys, phase=val_phase)
+        self._check_val_key_match(val_keys, phase=val_phase, mode="val")
+
+        test_phase = Phase.TEST
+        test_keys = None
+        if self.data_conf.get(test_phase, None) is not None:
+            test_keys = collect_dict_keys(self.data_conf[test_phase])
+        # Additional checks on the sanity of the config for val datasets
+        self._check_val_key_match(test_keys, phase=test_phase, mode="test")
 
         logging.info("Setting up components: Model, loss, optim, meters etc.")
         self.epoch = 0
-        self.steps = {Phase.TRAIN: 0, Phase.VAL: 0}
+        self.steps = {Phase.TRAIN: 0, Phase.VAL: 0, Phase.TEST: 0}
 
         self.logger = Logger(self.logging_conf)
 
@@ -1303,6 +1521,9 @@ class Trainer_yolo:
         self.loss["val"].loss.device = self.device
         self.loss["val"].loss.bbox_loss = self.loss["val"].loss.bbox_loss.to(self.device)
         self.loss["val"].loss.proj = self.loss["val"].loss.proj.to(self.device)
+        self.loss["test"].loss.device = self.device
+        self.loss["test"].loss.bbox_loss = self.loss["test"].loss.bbox_loss.to(self.device)
+        self.loss["test"].loss.proj = self.loss["test"].loss.proj.to(self.device)
         self.validator.device = self.device
 
         # print("self.validator.names:", self.validator.names)
@@ -1324,7 +1545,7 @@ class Trainer_yolo:
         if step % self.logging_conf.log_scalar_frequency == 0:
             for k in loss:
                 log_str = os.path.join(loss_str, k)
-                if self.mode == "train" or self.mode == "train_only":
+                if self.mode == "train" or self.mode == "train_only" or self.mode == "train2":
                     self.logger.log(log_str, loss[k], step)
         return core_loss
 

@@ -215,27 +215,36 @@ def apply_rotary_enc(
     freqs_cis: torch.Tensor,
     repeat_freqs_k: bool = False,
 ):
+    # print("apply_rotary_enc")
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    # print("xq_:", xq_.shape)
     xk_ = (
         torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
         if xk.shape[-2] != 0
         else None
     )
+    # print("xk_:", xk_.shape)
     freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    # print("freqs_cis:", freqs_cis.shape)
     xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    # print("xq_out:", xq_out.shape)
     if xk_ is None:
         # no keys to rotate, due to dropout
         return xq_out.type_as(xq).to(xq.device), xk
     # repeat freqs along seq_len dim to match k seq_len
     if repeat_freqs_k:
         r = xk_.shape[-2] // xq_.shape[-2]
+        # print("r:", r)
+        # print("freqs_cis.is_cuda:", freqs_cis.is_cuda)
         if freqs_cis.is_cuda:
             freqs_cis = freqs_cis.repeat(*([1] * (freqs_cis.ndim - 2)), r, 1)
+            # print("freqs_cis:", freqs_cis.shape)
         else:
             # torch.repeat on complex numbers may not be supported on non-CUDA devices
             # (freqs_cis has 4 dims and we repeat on dim 2) so we use expand + flatten
             freqs_cis = freqs_cis.unsqueeze(2).expand(-1, -1, r, -1, -1).flatten(2, 3)
     xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    # print("xk_out:", xk_out.shape)
     return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
 
 ###############################################################################################

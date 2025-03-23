@@ -19,7 +19,7 @@ scratch:
   # train_batch_size: 1
   num_train_workers: 10
   train_num_frames: 20
-  val_num_frames: 10
+  val_num_frames: 20
   max_num_objects: 3
   base_lr: 5.0e-6
   vision_lr: 3.0e-06
@@ -70,15 +70,15 @@ sav_dataset_train:
 
 sav_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_10/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_10/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_20/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val_20/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
 sav_dataset_test:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_10/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_10/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 

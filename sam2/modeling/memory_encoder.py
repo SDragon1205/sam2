@@ -219,7 +219,7 @@ class MemoryEncoder(nn.Module):
             x = self.fuser(x)
             # print("fuser:", x.shape)
             x = self.out_proj(x)
-            # print("out_proj:", x.shape)
+            # print("out_proj:", x.shape, x[0][0][0][0])
             pos = self.position_encoding(x).to(x.dtype)
             # print("position_encoding:", pos.shape)
             return {"vision_features": x, "vision_pos_enc": [pos]}

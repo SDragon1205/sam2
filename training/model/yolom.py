@@ -72,7 +72,7 @@ class YOLOMTrain(YOLOMBase):
         # detect_nc = 10,
         # detect_ch = [256, 64, 32],
         # detect_stride = [16., 8., 4.],
-        skip_first_frame: bool = False,
+        # skip_first_frame: bool = False,
         **kwargs,
     ):
         super().__init__(yolo, memory_attention, memory_encoder, **kwargs)
@@ -106,7 +106,7 @@ class YOLOMTrain(YOLOMBase):
         self.prob_to_sample_from_gt_for_train = prob_to_sample_from_gt_for_train
         # A random number generator with a fixed initial seed across GPUs
         self.rng = np.random.default_rng(seed=42)
-        self.skip_first_frame = skip_first_frame
+        # self.skip_first_frame = skip_first_frame
         # if freeze_image_encoder:
         #     for p in self.image_encoder.parameters():
         #         p.requires_grad = False
@@ -415,6 +415,62 @@ class YOLOMTrain(YOLOMBase):
 
         return (filtered_outputs[0], filtered_nested)
     
+    def select_frame_gtdata(self, gtdata, select_frame):
+        """
+        保留 batch_idx 為 select_frame 的資料，並將其 batch_idx 改為 0。
+        
+        :param gtdata: Dict，包含 batch_idx, cls, bboxes, ori_shape
+        :param select_frame: int，要保留的 frame 編號（batch_idx）
+        :return: 過濾後的 gtdata
+        """
+        # 取得 batch_idx == select_frame 的 mask
+        mask = gtdata["batch_idx"] == select_frame
+
+        # 過濾資料，並將 batch_idx 改成 0
+        gtdata_filtered = {
+            "batch_idx": gtdata["batch_idx"][mask] * 0,  # or .fill(0)
+            "cls": gtdata["cls"][mask],
+            "bboxes": gtdata["bboxes"][mask],
+            "ori_shape": [shape for i, shape in enumerate(gtdata["ori_shape"]) if gtdata["batch_idx"][i] == select_frame]
+        }
+
+        # 檢查長度一致性
+        lengths = {
+            "batch_idx": len(gtdata_filtered["batch_idx"]),
+            "cls": len(gtdata_filtered["cls"]),
+            "bboxes": len(gtdata_filtered["bboxes"]),
+            "ori_shape": len(gtdata_filtered["ori_shape"])
+        }
+        
+        if len(set(lengths.values())) != 1:
+            raise ValueError(f"Mismatch in lengths: {lengths}")
+        
+        return gtdata_filtered
+
+    def select_batch(self, all_frame_outputs, select_frame):
+        """
+        保留 all_frame_outputs 中 batch index 為 select_frame 的資料
+        並將其當作 batch_idx=0 處理（即剩下的 shape 是 batch size 1）
+
+        :param all_frame_outputs: Tuple or List，第一個 tensor 是 (B, 14, 8400)，
+                                第二個是 list of tensors，每個是 (B, 74, h, w)
+        :param select_frame: int，要保留的 batch index
+        :return: 過濾後的 all_frame_outputs，只保留 batch_idx == select_frame 的資料
+        """
+        batch_size = all_frame_outputs[0].shape[0]
+        if select_frame >= batch_size:
+            raise ValueError(f"select_frame={select_frame} exceeds batch_size={batch_size}")
+
+        # 取出 batch_idx == select_frame 的資料
+        selected_outputs_0 = all_frame_outputs[0][select_frame:select_frame+1]  # shape: (1, 14, 8400)
+
+        # 處理 nested list（每個 tensor shape: (B, 74, h, w)），只保留 select_frame 那一筆
+        selected_nested = [
+            tensor[select_frame:select_frame+1] for tensor in all_frame_outputs[1]
+        ]
+
+        return (selected_outputs_0, selected_nested)
+
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False
     ):
@@ -525,7 +581,7 @@ class YOLOMTrain(YOLOMBase):
                     # print("output_dict[cond_frame_outputs][0]:", output_dict["cond_frame_outputs"][0])
                 elif not self.has_cond_frame_outputs:
                     output_dict["non_cond_frame_outputs"][stage_id] = current_out
-                    # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id])
+                    # print(f"output_dict[non_cond_frame_outputs][{stage_id}]:", output_dict["non_cond_frame_outputs"][stage_id]['maskmem_features'][0][0][0][0])
                     # print("len(output_dict[non_cond_frame_outputs]):", len(output_dict["non_cond_frame_outputs"]))
 
                     trace_id = 3
@@ -574,7 +630,11 @@ class YOLOMTrain(YOLOMBase):
         # ]
         # sys.exit()
         # print("before input.gtdata:", input.gtdata)
-        if self.skip_first_frame:
+        if self.select_frame != 0:
+            input.gtdata = self.select_frame_gtdata(input.gtdata, self.select_frame)
+            all_frame_outputs = self.select_batch(all_frame_outputs, self.select_frame)
+
+        elif self.skip_first_frame:
             input.gtdata = self.skip_first_frame_gtdata_0(input.gtdata)
             # print("Before:")
             # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
