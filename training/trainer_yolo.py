@@ -680,6 +680,7 @@ class Trainer_yolo:
                     self.run_val()
                     self.run_test()
                     self.epoch += 1
+            # self.run_test()
             self.run_train()
             self.run_val()
             self.run_test()
@@ -698,6 +699,8 @@ class Trainer_yolo:
         
         if self.mode in ["train2"]:
             self.test_dataset = instantiate(self.data_conf.get(Phase.TEST, None))
+            # print(self.test_dataset)
+            # sys.exit()
 
     def run_train(self):
         # for name, param in self.model.module.yolo.named_parameters():
@@ -922,7 +925,7 @@ class Trainer_yolo:
             # if self.epoch == 70 or self.epoch == 90:
             #     self.val_best_map50 = 0
             if result2 > self.val_best_map50:
-                self.save_checkpoint(self.epoch + 1, ["best_val"])
+                self.save_checkpoint(self.epoch + 1, ["val_best"])
                 # self.save_checkpoint(self.epoch + 1)
                 self.val_best_map50 = result2
                 # if self.epoch < 70:
@@ -934,6 +937,7 @@ class Trainer_yolo:
 
     def run_test(self):
         if not self.test_dataset:
+            raise ValueError("self.test_dataset error")
             return
 
         dataloader = self.test_dataset.get_loader(epoch=int(self.epoch))
@@ -1051,7 +1055,7 @@ class Trainer_yolo:
                     if self.mode == "train" or self.mode == "train2":
                         self.logger.log(
                             os.path.join("Step_Stats", phase, progress_meter.name),
-                            progress_meter.test,
+                            progress_meter.val,
                             self.steps[Phase.TEST],
                         )
 
@@ -1521,9 +1525,10 @@ class Trainer_yolo:
         self.loss["val"].loss.device = self.device
         self.loss["val"].loss.bbox_loss = self.loss["val"].loss.bbox_loss.to(self.device)
         self.loss["val"].loss.proj = self.loss["val"].loss.proj.to(self.device)
-        self.loss["test"].loss.device = self.device
-        self.loss["test"].loss.bbox_loss = self.loss["test"].loss.bbox_loss.to(self.device)
-        self.loss["test"].loss.proj = self.loss["test"].loss.proj.to(self.device)
+        if self.mode == "train2":
+            self.loss["test"].loss.device = self.device
+            self.loss["test"].loss.bbox_loss = self.loss["test"].loss.bbox_loss.to(self.device)
+            self.loss["test"].loss.proj = self.loss["test"].loss.proj.to(self.device)
         self.validator.device = self.device
 
         # print("self.validator.names:", self.validator.names)

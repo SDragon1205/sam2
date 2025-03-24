@@ -58,6 +58,7 @@ class MemoryAttentionLayer(nn.Module):
 
         self.only_sa = only_sa
     def _forward_sa(self, tgt, query_pos):
+        # print("sa")
         # Self-Attention
         tgt2 = self.norm1(tgt)
         q = k = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
@@ -66,6 +67,7 @@ class MemoryAttentionLayer(nn.Module):
         return tgt
 
     def _forward_ca(self, tgt, memory, query_pos, pos, num_k_exclude_rope=0):
+        # print("ca")
         kwds = {}
         if num_k_exclude_rope > 0:
             assert isinstance(self.cross_attn_image, RoPEAttention)
@@ -81,6 +83,7 @@ class MemoryAttentionLayer(nn.Module):
             v=memory,
             **kwds,
         )
+        # sys.exit()
         tgt = tgt + self.dropout2(tgt2)
         return tgt
 

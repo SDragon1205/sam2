@@ -729,6 +729,10 @@ class YOLOMBase(torch.nn.Module):
                     maskmem_enc = (
                         maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                     )
+                    # print("maskmem_enc:", maskmem_enc.shape)
+                    # print("self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]:",  self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1].shape)
+                    # print("self.maskmem_tpos_enc:", self.maskmem_tpos_enc.shape)
+                    # sys.exit()
                 else:
                     # print("self.temp_pos_enc:", self.temp_pos_enc)
                     maskmem_enc = (
