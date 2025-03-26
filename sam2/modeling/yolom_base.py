@@ -122,6 +122,8 @@ class YOLOMBase(torch.nn.Module):
         trace_gradient: bool = False,
         skip_first_frame: bool = False,
         select_frame: int = 0,
+        encode_frame_first: bool = False,
+        two_sa: bool = False,
     ):
         super().__init__()
 
@@ -245,6 +247,9 @@ class YOLOMBase(torch.nn.Module):
         self.trace_gradient = trace_gradient
         self.skip_first_frame = skip_first_frame
         self.select_frame = select_frame
+        self.encode_frame_first = encode_frame_first
+        self.two_sa = two_sa
+
     @property
     def device(self):
         return next(self.parameters()).device
@@ -639,7 +644,20 @@ class YOLOMBase(torch.nn.Module):
         tpos_sign_mul = -1 if track_in_reverse else 1
         # Step 1: condition the visual features of the current frame on previous memories
         # print("is_init_cond_frame:", is_init_cond_frame)
-        if not is_init_cond_frame or self.encode_first_frame:
+        if self.two_sa:
+            pix_feat_with_mem = self.memory_attention(
+                curr=current_vision_feats,
+                curr_pos=current_vision_pos_embeds,
+                memory=None,
+                memory_pos=None,
+                num_obj_ptr_tokens=0,
+            )
+            # reshape the output (HW)BC => BCHW
+            pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+            # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
+            # sys.exit()
+            return pix_feat_with_mem, None
+        if not is_init_cond_frame or self.encode_first_frame or self.encode_frame_first:
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
             # Add conditioning frames's output first (all cond frames have t_pos=0 for

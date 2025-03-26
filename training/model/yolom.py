@@ -574,7 +574,7 @@ class YOLOMTrain(YOLOMBase):
             #     self.add_all_frames_to_correct_as_cond
             #     and stage_id in frames_to_add_correction_pt
             # )
-            if self.init_cond_frames_mode != 2:
+            if self.init_cond_frames_mode != 2 and (not self.two_sa):
                 # print("self.init_cond_frames_mode != 2")
                 if self.use_gt_in_all_frame:
                     output_dict["cond_frame_outputs"][0] = current_out
@@ -597,7 +597,7 @@ class YOLOMTrain(YOLOMBase):
                         output_dict["cond_frame_outputs"][stage_id] = current_out
                     else:
                         output_dict["non_cond_frame_outputs"][stage_id] = current_out
-
+            # print("output_dict:", output_dict)
             # for i_cur in range(len(yolo_outputs)):
             #     print(f"yolo_outputs[{i_cur}]: {yolo_outputs[i_cur].shape}")
             #     print(f"all_frame_outputs[{i_cur}]: {all_frame_outputs[i_cur].shape}")
@@ -669,7 +669,7 @@ class YOLOMTrain(YOLOMBase):
         # gt_masks=None,
         init_cond_frames_gt=None,
     ):
-        if frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2:
+        if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first:
             current_out = self._encode_memory_in_output(
                 current_vision_feats,
                 feat_sizes,
@@ -768,7 +768,7 @@ class YOLOMTrain(YOLOMBase):
             )
 
         # 呼叫函數
-        if self.init_cond_frames_mode != 2:
+        if self.init_cond_frames_mode != 2 and (not self.encode_frame_first) and (not self.two_sa):
             # print("self._encode_memory_in_output")
             current_out = self._encode_memory_in_output(
                 current_vision_feats,

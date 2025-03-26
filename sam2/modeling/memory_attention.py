@@ -28,6 +28,7 @@ class MemoryAttentionLayer(nn.Module):
         pos_enc_at_cross_attn_queries: bool,
         self_attention: nn.Module,
         only_sa: bool = False,
+        two_sa: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -57,9 +58,12 @@ class MemoryAttentionLayer(nn.Module):
         self.pos_enc_at_cross_attn_keys = pos_enc_at_cross_attn_keys
 
         self.only_sa = only_sa
+        self.two_sa = two_sa
+
     def _forward_sa(self, tgt, query_pos):
         # print("sa")
         # Self-Attention
+        # print("tgt[0][0][0]:", tgt[0][0][0])
         tgt2 = self.norm1(tgt)
         q = k = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
         tgt2 = self.self_attn(q, k, v=tgt2)
@@ -77,12 +81,21 @@ class MemoryAttentionLayer(nn.Module):
         # sys.exit()
         # Cross-Attention
         tgt2 = self.norm2(tgt)
-        tgt2 = self.cross_attn_image(
-            q=tgt2 + query_pos if self.pos_enc_at_cross_attn_queries else tgt2,
-            k=memory + pos if self.pos_enc_at_cross_attn_keys else memory,
-            v=memory,
-            **kwds,
-        )
+        if not self.two_sa:
+            tgt2 = self.cross_attn_image(
+                q=tgt2 + query_pos if self.pos_enc_at_cross_attn_queries else tgt2,
+                k=memory + pos if self.pos_enc_at_cross_attn_keys else memory,
+                v=memory,
+                **kwds,
+            )
+        else:
+            # print("self.two_sa:", self.two_sa)
+            tgt2 = self.cross_attn_image(
+                q=tgt2,
+                k=tgt2,
+                v=tgt2,
+                **kwds,
+            )
         # sys.exit()
         tgt = tgt + self.dropout2(tgt2)
         return tgt
@@ -124,6 +137,7 @@ class MemoryAttention(nn.Module):
         num_layers: int,
         batch_first: bool = True,  # Do layers expect batch first input?
         scale_for_pos_enc_at_input = 0.1,
+        two_sa: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -133,6 +147,7 @@ class MemoryAttention(nn.Module):
         self.pos_enc_at_input = pos_enc_at_input
         self.batch_first = batch_first
         self.scale_for_pos_enc_at_input = scale_for_pos_enc_at_input
+        self.two_sa = two_sa
 
     def forward(
         self,
@@ -150,9 +165,10 @@ class MemoryAttention(nn.Module):
                 curr_pos[0],
             )
 
-        assert (
-            curr.shape[1] == memory.shape[1]
-        ), "Batch size must be the same for curr and memory"
+        if not self.two_sa:
+            assert (
+                curr.shape[1] == memory.shape[1]
+            ), "Batch size must be the same for curr and memory"
 
         output = curr
         if self.pos_enc_at_input and curr_pos is not None:
@@ -162,8 +178,9 @@ class MemoryAttention(nn.Module):
             # Convert to batch first
             output = output.transpose(0, 1)
             curr_pos = curr_pos.transpose(0, 1)
-            memory = memory.transpose(0, 1)
-            memory_pos = memory_pos.transpose(0, 1)
+            if not self.two_sa:
+                memory = memory.transpose(0, 1)
+                memory_pos = memory_pos.transpose(0, 1)
 
         for layer in self.layers:
             kwds = {}
