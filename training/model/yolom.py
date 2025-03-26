@@ -574,7 +574,7 @@ class YOLOMTrain(YOLOMBase):
             #     self.add_all_frames_to_correct_as_cond
             #     and stage_id in frames_to_add_correction_pt
             # )
-            if self.init_cond_frames_mode != 2 and (not self.two_sa):
+            if self.init_cond_frames_mode != 2 and (not self.two_sa) and (not self.encode_frame_first):
                 # print("self.init_cond_frames_mode != 2")
                 if self.use_gt_in_all_frame:
                     output_dict["cond_frame_outputs"][0] = current_out
@@ -685,7 +685,11 @@ class YOLOMTrain(YOLOMBase):
                 None,
                 is_first_frame=True,
             )
-            output_dict["non_cond_frame_outputs"][-1] = current_out
+            if self.encode_first_frame:
+                output_dict["non_cond_frame_outputs"][-1] = current_out
+            elif self.encode_frame_first:
+                output_dict["non_cond_frame_outputs"][frame_idx-1] = current_out
+                # print(f"output_dict[non_cond_frame_outputs][{frame_idx-1}]:", output_dict["non_cond_frame_outputs"][frame_idx-1]['maskmem_features'][0][0][0][0])
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []

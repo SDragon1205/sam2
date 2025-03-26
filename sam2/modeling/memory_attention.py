@@ -82,6 +82,7 @@ class MemoryAttentionLayer(nn.Module):
         # Cross-Attention
         tgt2 = self.norm2(tgt)
         if not self.two_sa:
+            # print("memory:", memory.shape, memory[0][0][0])
             tgt2 = self.cross_attn_image(
                 q=tgt2 + query_pos if self.pos_enc_at_cross_attn_queries else tgt2,
                 k=memory + pos if self.pos_enc_at_cross_attn_keys else memory,
