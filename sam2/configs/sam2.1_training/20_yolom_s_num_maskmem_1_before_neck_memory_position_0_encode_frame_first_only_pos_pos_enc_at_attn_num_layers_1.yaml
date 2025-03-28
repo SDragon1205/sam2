@@ -2,7 +2,8 @@
 
 scratch:
   mode: val #val #train # train_only
-  two_sa: True
+  encode_frame_first: True
+  two_sa: False
   temp_pos_enc: False
   init_cond_frames_mode: 1
   self_memory_encode: True
@@ -369,6 +370,7 @@ trainer:
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
     two_sa: ${scratch.two_sa}
+    encode_frame_first: ${scratch.encode_frame_first}
 
   validator:
     _target_: training.validator.maP50_Validator

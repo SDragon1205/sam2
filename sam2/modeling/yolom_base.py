@@ -107,6 +107,7 @@ class YOLOMBase(torch.nn.Module):
         zero_in_bd: bool = False,
         use_gt_in_first_frame: bool = False,
         memory_before_neck: bool = True,
+        memory_before_16: bool = False,
         use_gt_in_all_frame: bool = False,
         has_cond_frame_outputs: bool = True,
         memory_position: int = 2,
@@ -124,6 +125,7 @@ class YOLOMBase(torch.nn.Module):
         select_frame: int = 0,
         encode_frame_first: bool = False,
         two_sa: bool = False,
+        mem_dim: int = -1,
     ):
         super().__init__()
 
@@ -153,7 +155,10 @@ class YOLOMBase(torch.nn.Module):
 
         # Part 3: memory encoder for the previous frame's outputs
         self.memory_encoder = memory_encoder
-        self.mem_dim = self.hidden_dim
+        if mem_dim == -1:
+            self.mem_dim = self.hidden_dim
+        else:
+            self.mem_dim = mem_dim
         if hasattr(self.memory_encoder, "out_proj") and hasattr(
             self.memory_encoder.out_proj, "weight"
         ):
@@ -249,6 +254,7 @@ class YOLOMBase(torch.nn.Module):
         self.select_frame = select_frame
         self.encode_frame_first = encode_frame_first
         self.two_sa = two_sa
+        self.memory_before_16 = memory_before_16
 
     @property
     def device(self):
@@ -505,7 +511,9 @@ class YOLOMBase(torch.nn.Module):
         #     image_embeddings=backbone_features,
         #     high_res_features=high_res_features,
         # )
-        if self.memory_before_neck:
+        if self.memory_before_16:
+            x_preds = self.yolo.forward_16_head(backbone_features)
+        elif self.memory_before_neck:
             x_preds = self.yolo.forward_neck_head(backbone_features)
             # print("self.yolo.forward_neck_head")
             # print("x_preds[0]:", x_preds[0].shape)
@@ -587,7 +595,9 @@ class YOLOMBase(torch.nn.Module):
         """Get the image feature on the input batch."""
         # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
-        if self.memory_before_neck:
+        if self.memory_before_16:
+            backbone_out = self.yolo.forward_backbone_15(img_batch)
+        elif self.memory_before_neck:
             backbone_out = self.yolo.forward_backbone(img_batch)
             # print("self.yolo.forward_backbone")
             # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
@@ -841,6 +851,9 @@ class YOLOMBase(torch.nn.Module):
                 # directly add no-mem embedding (instead of using the transformer encoder)
                 # print("current_vision_feats[-1]:", current_vision_feats[-1].shape)
                 # print("self.no_mem_embed:", self.no_mem_embed.shape, self.no_mem_embed)
+                # if self.init_cond_frames_mode == 3:
+                #     pix_feat_with_mem = current_vision_feats[-1]
+                # else:
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
                 pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
                 # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
@@ -860,8 +873,14 @@ class YOLOMBase(torch.nn.Module):
             to_cat_memory_pos_embed = [self.no_mem_pos_enc.expand(1, B, self.mem_dim)]
 
         # Step 2: Concatenate the memories and forward through the transformer encoder
-        memory = torch.cat(to_cat_memory, dim=0)
-        memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
+        if self.init_cond_frames_mode == 3:
+            memory = torch.cat(to_cat_memory, dim=2)
+            memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=2)
+        else:
+            memory = torch.cat(to_cat_memory, dim=0)
+            memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
+        # print("memory:", memory.shape)
+        # print("memory_pos_embed:", memory_pos_embed.shape)
         # print("num_obj_ptr_tokens:", num_obj_ptr_tokens)
         pix_feat_with_mem = self.memory_attention(
             curr=current_vision_feats,

@@ -182,6 +182,63 @@ class yolo(nn.Module):
         # sys.exit()
         return output
     
+    def forward_backbone_15(self, x: torch.Tensor):
+        y = []  # outputs
+        pos = []
+        backbone_fpn = []
+        for i_m in range(16):
+            m = self.detection_model.model[i_m]
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.detection_model.save else None)  # save output
+            if (m.i in self.detection_model.save) and (i_m == 9 or i_m == 12 or i_m == 15):
+                backbone_fpn.append(x)
+                pos.append(self.position_encoding(x).to(x.dtype))
+                # print(f"{i_m}: {x.shape}")
+        backbone_fpn[0], backbone_fpn[2] = backbone_fpn[2], backbone_fpn[0]
+        pos[0], pos[2] = pos[2], pos[0]
+        # print("backbone_fpn:", backbone_fpn[0].shape, backbone_fpn[1].shape, backbone_fpn[2].shape)
+        # print("pos:", pos[0].shape, pos[1].shape, pos[2].shape)
+        output = {
+            "backbone_fpn": backbone_fpn,
+            "vision_pos_enc": pos,
+        }
+        # for i_y in range(len(y)):
+        #     if y[i_y] == None:
+        #         print(f"y[{i_y}]: None")
+        #     else:
+        #         print(f"y[{i_y}]: {y[i_y].shape}")
+        # sys.exit()
+        return output
+    
+    def forward_16_head(self, x_list):
+        y = []
+        for i_m in range(16):
+            # m = self.detection_model.model[i_m]
+            if i_m == 9:
+                y.append(x_list[2])
+            elif i_m == 12:
+                y.append(x_list[1])
+            elif i_m == 15:
+                y.append(x_list[0])
+            else:
+                y.append(None)
+        # print("after")
+        # for i_y in range(len(y)):
+        #     if y[i_y] == None:
+        #         print(f"y[{i_y}]: None")
+        #     else:
+        #         print(f"y[{i_y}]: {y[i_y].shape}")
+        x = x_list[0]
+        for i_m in range(16, 23):
+            m = self.detection_model.model[i_m]
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.detection_model.save else None)  # save output
+        # sys.exit()
+        return x
 # class yolo(YOLO):
 #     def __init__(self, model="yolo11n.pt", task=None, verbose=False):
 #         super().__init__(model=model, task=task, verbose=verbose)

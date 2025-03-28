@@ -262,10 +262,16 @@ class YOLOMTrain(YOLOMBase):
             # print("num_frames:", num_frames)
         elif self.init_cond_frames_mode == 1:
             init_cond_frames = [start_frame_idx]
-        else:
+        elif self.init_cond_frames_mode == 2:
             init_cond_frames = [
                 t for t in range(start_frame_idx, num_frames)
             ]
+        elif self.init_cond_frames_mode == 3:
+            init_cond_frames = [
+                t for t in range(start_frame_idx, self.num_maskmem)
+            ]
+        else:
+            raise ValueError(f"init_cond_frames_mode error: {self.init_cond_frames_mode}")
 
         backbone_out["init_cond_frames"] = init_cond_frames
         backbone_out["frames_not_in_init_cond"] = [
@@ -471,6 +477,56 @@ class YOLOMTrain(YOLOMBase):
 
         return (selected_outputs_0, selected_nested)
 
+    def skip_first_frame_gtdata_t(self, gtdata, t: int):
+        """
+        移除 batch_idx ∈ [0, t) 的資料，並將其餘 batch_idx 減去 t
+        :param gtdata: Dict，包含 batch_idx, cls, bboxes, ori_shape
+        :param t: 要移除的 batch_idx 數量
+        :return: 過濾後的 gtdata
+        """
+        mask = gtdata["batch_idx"] >= t
+
+        gtdata_filtered = {
+            "batch_idx": gtdata["batch_idx"][mask] - t,
+            "cls": gtdata["cls"][mask],
+            "bboxes": gtdata["bboxes"][mask],
+            "ori_shape": [shape for i, shape in enumerate(gtdata["ori_shape"]) if gtdata["batch_idx"][i] >= t]
+        }
+
+        lengths = {
+            "batch_idx": len(gtdata_filtered["batch_idx"]),
+            "cls": len(gtdata_filtered["cls"]),
+            "bboxes": len(gtdata_filtered["bboxes"]),
+            "ori_shape": len(gtdata_filtered["ori_shape"])
+        }
+
+        if len(set(lengths.values())) != 1:
+            raise ValueError(f"Mismatch in lengths: {lengths}")
+
+        return gtdata_filtered
+
+
+    def remove_batch_t(self, all_frame_outputs, t: int):
+        """
+        移除 all_frame_outputs 中 batch_idx ∈ [0, t) 的資料
+        :param all_frame_outputs: List，包含多個不同形狀的 tensor
+        :param t: 要移除的前面幾個 batch index
+        :return: 過濾後的 all_frame_outputs
+        """
+        batch_size = all_frame_outputs[0].shape[0]
+        if batch_size <= t:
+            raise ValueError(f"Batch size must be greater than {t} to remove batch range [0, {t})")
+
+        batch_mask = torch.arange(batch_size, device=all_frame_outputs[0].device) >= t
+
+        filtered_outputs = [all_frame_outputs[0][batch_mask]]
+
+        filtered_nested = [
+            tensor[batch_mask] for tensor in all_frame_outputs[1]
+        ]
+
+        return (filtered_outputs[0], filtered_nested)
+
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False
     ):
@@ -630,7 +686,13 @@ class YOLOMTrain(YOLOMBase):
         # ]
         # sys.exit()
         # print("before input.gtdata:", input.gtdata)
-        if self.select_frame != 0:
+        # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
+        # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
+        if self.init_cond_frames_mode == 3:
+            input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.num_maskmem)
+            all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.num_maskmem)
+
+        elif self.select_frame != 0:
             input.gtdata = self.select_frame_gtdata(input.gtdata, self.select_frame)
             all_frame_outputs = self.select_batch(all_frame_outputs, self.select_frame)
 
@@ -648,6 +710,10 @@ class YOLOMTrain(YOLOMBase):
             # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
         if self.trace_gradient:
             return all_frame_outputs, output_dict, first_backbone_feature
+        # print("after input.gtdata:", input.gtdata)
+        # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
+        # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)
+        # sys.exit()
         return all_frame_outputs
 
     def track_step(
