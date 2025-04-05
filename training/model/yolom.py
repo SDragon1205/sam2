@@ -121,6 +121,20 @@ class YOLOMTrain(YOLOMBase):
         #     # defer image feature computation on a frame until it's being tracked
         #     backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
 
+        # total_params_yolo = sum(p.numel() for p in self.yolo.parameters())
+        # print(f"Total yolo parameters: {total_params_yolo}")
+        # total_params_memory_encoder = sum(p.numel() for p in self.memory_encoder.parameters())
+        # print(f"Total memory_encoder parameters: {total_params_memory_encoder}")
+        # total_params_memory_attention = sum(p.numel() for p in self.memory_attention.parameters())
+        # print(f"Total memory_attention parameters: {total_params_memory_attention}")
+
+        # for name, param in self.yolo.named_parameters():
+        #     print(f"yolo, {name}: {param.shape}")
+        # for name, param in self.memory_encoder.named_parameters():
+        #     print(f"memory_encoder, {name}: {param.shape}")
+        # for name, param in self.memory_attention.named_parameters():
+        #     print(f"memory_attention, {name}: {param.shape}")
+        # sys.exit()
         backbone_out = self.forward_image(input.flat_img_batch)
         backbone_out = self.prepare_prompt_inputs(backbone_out, input)
         previous_stages_out = self.forward_tracking(backbone_out, input)
@@ -691,8 +705,10 @@ class YOLOMTrain(YOLOMBase):
         if self.init_cond_frames_mode == 3:
             input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.num_maskmem)
             all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.num_maskmem)
-
-        elif self.select_frame != 0:
+        elif self.skip_n_frame != -1:
+            input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.skip_n_frame)
+            all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.skip_n_frame)
+        elif self.select_frame != -1:
             input.gtdata = self.select_frame_gtdata(input.gtdata, self.select_frame)
             all_frame_outputs = self.select_batch(all_frame_outputs, self.select_frame)
 

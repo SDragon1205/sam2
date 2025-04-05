@@ -330,6 +330,8 @@ trainer:
     rand_init_cond_frames_for_train: True  # random 1~2
     num_correction_pt_per_frame: 7
     use_act_ckpt_iterative_pt_sampling: false
+    # select_frame: 2
+    # skip_n_frame: 2
     
 
     
@@ -352,7 +354,7 @@ trainer:
     max_det: 300
     agnostic: false
     names: ${scratch.names}
-    
+    # scale_boxes: True
 
   data:
     train:

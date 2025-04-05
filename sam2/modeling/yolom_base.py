@@ -122,7 +122,8 @@ class YOLOMBase(torch.nn.Module):
         fuse_backbone_and_bank: bool = False,
         trace_gradient: bool = False,
         skip_first_frame: bool = False,
-        select_frame: int = 0,
+        skip_n_frame: int = -1,
+        select_frame: int = -1,
         encode_frame_first: bool = False,
         two_sa: bool = False,
         mem_dim: int = -1,
@@ -255,6 +256,7 @@ class YOLOMBase(torch.nn.Module):
         self.encode_frame_first = encode_frame_first
         self.two_sa = two_sa
         self.memory_before_16 = memory_before_16
+        self.skip_n_frame = skip_n_frame
 
     @property
     def device(self):
@@ -855,6 +857,7 @@ class YOLOMBase(torch.nn.Module):
                 #     pix_feat_with_mem = current_vision_feats[-1]
                 # else:
                 pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
+                # print("yes")
                 pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
                 # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
                 current_bank = None
@@ -1137,7 +1140,7 @@ class YOLOMBase(torch.nn.Module):
             plt.show()
             sys.exit()
     
-    def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.001, iou=0.7, agnostic_nms=False, max_det=300): #conf=0.25
+    def _get_high_res_masks_from_yolo_outputs(self, preds, conf=0.25, iou=0.7, agnostic_nms=False, max_det=300): #conf=0.25
         # print("old_preds:", preds[0].shape, preds[1][0].shape, preds[1][1].shape, preds[1][2].shape)
         preds = ops.non_max_suppression(
             preds,

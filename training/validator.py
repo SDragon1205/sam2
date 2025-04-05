@@ -6,7 +6,7 @@ from ultralytics.utils import LOGGER, ops
 import sys
 
 class maP50_Validator:
-    def __init__(self, names, save_dir=None, imgsz=1024, conf=0.001, iou=0.7, max_det=300, agnostic=False):
+    def __init__(self, names, save_dir=None, imgsz=1024, conf=0.001, iou=0.7, max_det=300, agnostic=False, scale_boxes=False, padding=False):
         self.nc = len(names)
         # self.names = names
         self.conf = conf
@@ -23,6 +23,8 @@ class maP50_Validator:
         self.imgsz = imgsz
         self.iouv = torch.linspace(0.5, 0.95, 10)  # IoU vector for mAP@0.5:0.95
         self.niou = self.iouv.numel()
+        self.scale_boxes = scale_boxes
+        self.padding = padding
 
     def init_metrics(self):
         """Initialize evaluation metrics for YOLO."""
@@ -71,7 +73,8 @@ class maP50_Validator:
         idx = batch["batch_idx"] == si
         cls = batch["cls"][idx].squeeze(-1)
         bbox = batch["bboxes"][idx]
-        # ori_shape = batch["ori_shape"][si]
+        if self.scale_boxes:
+            ori_shape = batch["ori_shape"][si]
         imgsz = (self.imgsz, self.imgsz)
         # ratio_pad = batch["ratio_pad"][si]
         # print("ori_shape:", ori_shape, type(ori_shape))
@@ -83,15 +86,19 @@ class maP50_Validator:
             return None
         if len(cls):
             bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
-            # ops.scale_boxes(imgsz, bbox, ori_shape)#, ratio_pad=ratio_pad)  # native-space labels
+            if self.scale_boxes:
+                ops.scale_boxes(imgsz, bbox, ori_shape, padding=self.padding)#, ratio_pad=ratio_pad)  # native-space labels
+        if self.scale_boxes:
+            return {"cls": cls, "bbox": bbox, "imgsz": imgsz, "ori_shape": ori_shape}
         return {"cls": cls, "bbox": bbox, "imgsz": imgsz}#, "ori_shape": ori_shape}#, "ratio_pad": ratio_pad}
 
     def _prepare_pred(self, pred, pbatch):
         """Prepares a batch of images and annotations for validation."""
         predn = pred.clone()
-        # ops.scale_boxes(
-        #     pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"] #, ratio_pad=pbatch["ratio_pad"]
-        # )  # native-space pred
+        if self.scale_boxes:
+            ops.scale_boxes(
+                pbatch["imgsz"], predn[:, :4], pbatch["ori_shape"], padding=self.padding #, ratio_pad=pbatch["ratio_pad"]
+            )  # native-space pred
         return predn
 
     def update_metrics(self, preds, batch):

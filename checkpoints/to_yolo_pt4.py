@@ -4,7 +4,7 @@ from ultralytics.nn.tasks import DetectionModel
 from sam2.modeling.memory_encoder import MemoryEncoder, MaskDownSampler, Fuser, CXBlock
 from sam2.modeling.position_encoding import PositionEmbeddingSine
 from sam2.modeling.memory_attention import MemoryAttention, MemoryAttentionLayer
-from sam2.modeling.sam.transformer import RoPEAttention
+from sam2.modeling.sam.transformer import RoPEAttention, Attention
 from iopath.common.file_io import g_pathmgr
 from typing import List, Optional, Tuple, Type
 import sys
@@ -82,11 +82,11 @@ trunc_normal_(no_mem_pos_enc, std=0.02)
     #         layer_scale_init_value: 1e-6
     #         use_dwconv: True  # depth-wise convs
     #       num_layers: 2
-position_encoding = PositionEmbeddingSine(num_pos_feats=64,normalize= True,scale=None, temperature= 10000)
+position_encoding = PositionEmbeddingSine(num_pos_feats=128,normalize= True,scale=None, temperature= 10000)
 mask_downsampler = MaskDownSampler(embed_dim=128, in_chans= 74, has_mask_down=False)
 layer = CXBlock(dim= 128,kernel_size= 7,padding= 3,layer_scale_init_value= 1e-6,use_dwconv= True)
 fuser=Fuser(layer=layer, num_layers= 2)
-memory_encoder = MemoryEncoder(out_dim= 64, position_encoding=position_encoding, mask_downsampler=mask_downsampler, fuser=fuser, in_dim=128, no_mask_downsampler= True)#, only_pos=True)
+memory_encoder = MemoryEncoder(out_dim= 128, position_encoding=position_encoding, mask_downsampler=mask_downsampler, fuser=fuser, in_dim=128, no_mask_downsampler= True)#, only_pos=True)
 # for k, v in memory_encoder.state_dict().items():  # 第一層
 #     print(k)
 memory_attention= MemoryAttention(
@@ -97,9 +97,10 @@ memory_attention= MemoryAttention(
         dim_feedforward= 2048,
         dropout= 0.1,
         pos_enc_at_attn= False,
-        self_attention=RoPEAttention(
-            rope_theta= 10000.0,
-            feat_sizes= [80, 80],
+        # self_attention=RoPEAttention(
+        self_attention=Attention(
+            # rope_theta= 10000.0,
+            # feat_sizes= [80, 80],
             embedding_dim= 128,
             num_heads= 1,
             downsample_rate= 1,
@@ -108,10 +109,11 @@ memory_attention= MemoryAttention(
         d_model= 128,
         pos_enc_at_cross_attn_keys= True,
         pos_enc_at_cross_attn_queries= False,
-        cross_attention=RoPEAttention(
-            rope_theta= 10000.0,
-            feat_sizes= [80, 80],
-            rope_k_repeat= True,
+        # cross_attention=RoPEAttention(
+        cross_attention=Attention(
+            # rope_theta= 10000.0,
+            # feat_sizes= [80, 80],
+            # rope_k_repeat= True,
             embedding_dim= 128,
             num_heads= 1,
             downsample_rate= 1,
@@ -142,8 +144,8 @@ memory_attention= MemoryAttention(
 # # sys.exit()
 
 # Temporal encoding of the memories
-num_maskmem = 2
-mem_dim = 64
+num_maskmem = 1
+mem_dim = 128
 maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
 )
@@ -182,8 +184,8 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolom_s_num_maskmem_1_memory_position_0_no_mask_downsampler.yaml/checkpoints/checkpoint.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_39_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
-output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
-
+# output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
+output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1_no_rope_attention.pt"
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
 

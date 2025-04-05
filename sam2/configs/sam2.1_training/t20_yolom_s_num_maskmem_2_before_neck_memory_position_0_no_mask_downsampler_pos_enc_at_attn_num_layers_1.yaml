@@ -2,8 +2,6 @@
 
 scratch:
   mode: train #val #train # train_only
-  select_frame: 0
-  num_maskmem: 2
   temp_pos_enc: True
   init_cond_frames_mode: 1
   self_memory_encode: True
@@ -19,7 +17,7 @@ scratch:
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
-  train_num_frames: 20
+  train_num_frames: 21
   val_num_frames: 20
   max_num_objects: 3
   base_lr: 5.0e-6
@@ -297,7 +295,7 @@ trainer:
         no_mask_downsampler: True
         # only_pos: True
 
-    num_maskmem: ${scratch.num_maskmem}
+    num_maskmem: 2
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -368,7 +366,8 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    select_frame: ${scratch.select_frame}
+    # select_frame: 2
+    skip_n_frame: 2
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -379,7 +378,7 @@ trainer:
     max_det: 300
     agnostic: false
     names: ${scratch.names}
-    
+    # scale_boxes: True
 
   data:
     train:

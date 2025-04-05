@@ -366,6 +366,8 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
+    # select_frame: 2
+    # skip_n_frame: 2
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -376,7 +378,7 @@ trainer:
     max_det: 300
     agnostic: false
     names: ${scratch.names}
-    
+    # scale_boxes: True
 
   data:
     train:

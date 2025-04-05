@@ -200,6 +200,7 @@ class Attention(nn.Module):
         downsample_rate: int = 1,
         dropout: float = 0.0,
         kv_in_dim: int = None,
+        is_causal=False,
     ) -> None:
         super().__init__()
         self.embedding_dim = embedding_dim
@@ -216,6 +217,8 @@ class Attention(nn.Module):
         self.out_proj = nn.Linear(self.internal_dim, embedding_dim)
 
         self.dropout_p = dropout
+
+        self.is_causal = is_causal
 
     def _separate_heads(self, x: Tensor, num_heads: int) -> Tensor:
         b, n, c = x.shape
@@ -240,7 +243,7 @@ class Attention(nn.Module):
 
         dropout_p = self.dropout_p if self.training else 0.0
         # Attention
-        out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p, is_causal=self.is_causal)
 
         out = self._recombine_heads(out)
         out = self.out_proj(out)
@@ -312,7 +315,7 @@ class RoPEAttention(Attention):
         # print("after v:", v.shape)
         dropout_p = self.dropout_p if self.training else 0.0
         # Attention
-        out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p, is_causal=self.is_causal)
 
         out = self._recombine_heads(out)
         out = self.out_proj(out)
