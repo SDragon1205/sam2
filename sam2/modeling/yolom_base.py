@@ -20,6 +20,7 @@ from ultralytics.utils import ops
 import matplotlib.pyplot as plt
 import sys
 from ultralytics import YOLO
+from ultralytics.utils import checks
 # a large negative value as a placeholder score for missing objects
 NO_OBJ_SCORE = -1024.0
 
@@ -127,6 +128,7 @@ class YOLOMBase(torch.nn.Module):
         encode_frame_first: bool = False,
         two_sa: bool = False,
         mem_dim: int = -1,
+        world: bool = False,
     ):
         super().__init__()
 
@@ -257,6 +259,18 @@ class YOLOMBase(torch.nn.Module):
         self.two_sa = two_sa
         self.memory_before_16 = memory_before_16
         self.skip_n_frame = skip_n_frame
+        self.world = world 
+        if self.world:
+            # Import and assign clip
+            try:
+                import clip
+            except ImportError:
+                checks.check_requirements("git+https://github.com/ultralytics/CLIP.git")
+                import clip
+            self.clip = clip
+            self.text_model, _  = self.clip.load("ViT-B/32")#, device=self.yolo.detection_model.device)
+            for p in self.text_model.parameters():
+                p.requires_grad_(False)
 
     @property
     def device(self):
