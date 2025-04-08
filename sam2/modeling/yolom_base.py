@@ -129,6 +129,7 @@ class YOLOMBase(torch.nn.Module):
         two_sa: bool = False,
         mem_dim: int = -1,
         world: bool = False,
+        current_frame_occluded_all: bool = False,
     ):
         super().__init__()
 
@@ -259,6 +260,8 @@ class YOLOMBase(torch.nn.Module):
         self.two_sa = two_sa
         self.memory_before_16 = memory_before_16
         self.skip_n_frame = skip_n_frame
+        self.current_frame_occluded_all = current_frame_occluded_all
+
         self.world = world 
         if self.world:
             # Import and assign clip
@@ -271,7 +274,7 @@ class YOLOMBase(torch.nn.Module):
             self.text_model, _  = self.clip.load("ViT-B/32")#, device=self.yolo.detection_model.device)
             for p in self.text_model.parameters():
                 p.requires_grad_(False)
-
+        
     @property
     def device(self):
         return next(self.parameters()).device
@@ -626,7 +629,7 @@ class YOLOMBase(torch.nn.Module):
         # sys.exit()
         return backbone_out#, gt_yolo_out
 
-    def _prepare_backbone_features(self, backbone_out):
+    def _prepare_backbone_features(self, backbone_out, occluded_feats):
         """Prepare and flatten visual features."""
         backbone_out = backbone_out.copy()
         assert len(backbone_out["backbone_fpn"]) == len(backbone_out["vision_pos_enc"])
@@ -640,7 +643,19 @@ class YOLOMBase(torch.nn.Module):
         vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
         vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
 
-        return backbone_out, vision_feats, vision_pos_embeds, feat_sizes
+        vision_feats_occluded = None
+        if self.current_frame_occluded_all:
+            feature_maps_occluded = occluded_feats["backbone_fpn"][-self.num_feature_levels :]
+            # vision_pos_embeds_occluded = occluded_feats["vision_pos_enc"][-self.num_feature_levels :]
+            vision_feats_occluded = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_occluded]
+            # vision_pos_embeds_occluded = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds_occluded]
+            # # print("len(vision_pos_embeds):", len(vision_pos_embeds))
+            # # print("len(vision_pos_embeds_occluded):", len(vision_pos_embeds_occluded))
+            # print("0 torch.equal(vision_pos_embeds, vision_pos_embeds_occluded):", torch.equal(vision_pos_embeds[0], vision_pos_embeds_occluded[0]))
+            # print("1 torch.equal(vision_pos_embeds, vision_pos_embeds_occluded):", torch.equal(vision_pos_embeds[1], vision_pos_embeds_occluded[1]))
+            # print("2 torch.equal(vision_pos_embeds, vision_pos_embeds_occluded):", torch.equal(vision_pos_embeds[2], vision_pos_embeds_occluded[2]))
+            # sys.exit()
+        return backbone_out, vision_feats, vision_pos_embeds, feat_sizes, vision_feats_occluded
 
     def _prepare_memory_conditioned_features(
         self,
@@ -1014,6 +1029,7 @@ class YOLOMBase(torch.nn.Module):
         track_in_reverse,
         prev_sam_mask_logits,
     ):
+        # print("_track_step current_vision_feats:", current_vision_feats[0][0][0][0])
         # current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
         # High-resolution feature maps for the SAM head, reshape (HW)BC => BCHW
         # self.memory_position = 0
@@ -1288,6 +1304,7 @@ class YOLOMBase(torch.nn.Module):
         current_bank,
         is_first_frame = False,
     ):
+        # print("_encode_memory_in_output, current_vision_feats:", current_vision_feats[0][0][0][0])
         if run_mem_encoder and self.num_maskmem > 0:
             # if self.use_freeze_model:
             #     high_res_masks_for_mem_enc = self._get_high_res_masks_from_yolo_outputs(yolo_outputs)

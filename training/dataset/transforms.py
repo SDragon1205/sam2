@@ -22,7 +22,7 @@ from PIL import Image as PILImage
 from torchvision.transforms import InterpolationMode
 
 from training.utils.data_utils import VideoDatapoint, VideoDatapoint_yolo
-
+import sys
 
 def hflip(datapoint, index):
 
@@ -725,6 +725,9 @@ class ToTensorAPI_yolo:
                 img.data = Fv2.to_image_tensor(img.data)
             else:
                 img.data = F.to_tensor(img.data)
+            # print("max:", torch.max(img.data))
+            # print("min:", torch.min(img.data))
+        # sys.exit()
         return datapoint
 
 class NormalizeAPI_yolo:
@@ -740,7 +743,8 @@ class NormalizeAPI_yolo:
                 img.data = Fv2.normalize(img.data, mean=self.mean, std=self.std)
             else:
                 img.data = F.normalize(img.data, mean=self.mean, std=self.std)
-
+            # print("NormalizeAPI_yolo max:", torch.max(img.data))
+            # print("NormalizeAPI_yolo min:", torch.min(img.data))
         return datapoint
 
 class RandomAffine_yolo:

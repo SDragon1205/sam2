@@ -276,9 +276,19 @@ class YOLOMTrain(YOLOMBase):
         # for name, param in self.memory_attention.named_parameters():
         #     print(f"memory_attention, {name}: {param.shape}")
         # sys.exit()
+        # print("input.flat_img_batch:", input.flat_img_batch.shape)
+        # print("max:", torch.max(input.flat_img_batch))
+        # print("min:", torch.min(input.flat_img_batch))
+        # print("input.flat_img_batch:", input.flat_img_batch)
+        # print("torch.ones_like(input.flat_img_batch):", torch.ones_like(input.flat_img_batch))
+        # sys.exit()
+        occluded_feats = None
+        if self.current_frame_occluded_all:
+            occluded_feats = self.forward_image(torch.ones_like(input.flat_img_batch))
+        # print("occluded_feats:", occluded_feats)
         backbone_out = self.forward_image(input.flat_img_batch)
         backbone_out = self.prepare_prompt_inputs(backbone_out, input)
-        previous_stages_out = self.forward_tracking(backbone_out, input)
+        previous_stages_out = self.forward_tracking(backbone_out, input, occluded_feats=occluded_feats)
         # previous_stages_out = self._forward_yolo_neck_heads(backbone_out["backbone_fpn"])
         # previous_stages_out = self.yolo.detection_model._predict_once(input.flat_img_batch)
 
@@ -720,7 +730,10 @@ class YOLOMTrain(YOLOMBase):
         return txt_feats
     
     def get_txt_feats(self, cls, batch_idx, consistent_transform=True):
-        batch_texts = self.get_texts(cls, batch_idx, consistent_transform=consistent_transform)
+        if self.training:
+            batch_texts = self.get_texts(cls, batch_idx, consistent_transform=consistent_transform)
+        else:
+            batch_texts = ['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']
         texts = list(itertools.chain(*batch_texts))
         text_token = self.clip.tokenize(texts).to(cls.device)
         txt_feats = self.text_model.encode_text(text_token).to(dtype=torch.float32) #batch["img"].dtype)  # torch.float32
@@ -731,7 +744,7 @@ class YOLOMTrain(YOLOMBase):
         return txt_feats
     
     def forward_tracking(
-        self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False
+        self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False, occluded_feats=None,
     ):
         if self.world:
             txt_feats = self.get_txt_feats(input.gtdata["cls"], input.gtdata["batch_idx"], consistent_transform=True)
@@ -745,7 +758,8 @@ class YOLOMTrain(YOLOMBase):
                 vision_feats,
                 vision_pos_embeds,
                 feat_sizes,
-            ) = self._prepare_backbone_features(backbone_out)
+                vision_feats_occluded,
+            ) = self._prepare_backbone_features(backbone_out, occluded_feats)
 
         # Starting the stage loop
         num_frames = backbone_out["num_frames"]
@@ -800,6 +814,9 @@ class YOLOMTrain(YOLOMBase):
                     first_backbone_feature = current_vision_feats[0]
                 # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
+                if self.current_frame_occluded_all:
+                    current_vision_feats_occluded = [x[:, img_ids] for x in vision_feats_occluded]
+                    # print("current_vision_feats_occluded:", current_vision_feats_occluded[0].shape, current_vision_feats_occluded[0][0][0][0])
             else:
                 raise ValueError(f"img_feats_already_computed is False")
                 # # Otherwise, compute the image features on the fly for the given img_ids
@@ -829,6 +846,7 @@ class YOLOMTrain(YOLOMBase):
                 num_frames=num_frames,
                 init_cond_frames_gt=init_cond_frames_gt,
                 img_ids=img_ids,
+                current_vision_feats_occluded=current_vision_feats_occluded,
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames #or (
@@ -941,6 +959,7 @@ class YOLOMTrain(YOLOMBase):
         # frames_to_add_correction_pt=None,
         # gt_masks=None,
         init_cond_frames_gt=None,
+        current_vision_feats_occluded=None,
     ):
         if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first:
             current_out = self._encode_memory_in_output(
@@ -966,19 +985,34 @@ class YOLOMTrain(YOLOMBase):
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
-        yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
-            frame_idx,
-            is_init_cond_frame,
-            current_vision_feats,
-            current_vision_pos_embeds,
-            feat_sizes,
-            # point_inputs,
-            # mask_inputs,
-            output_dict,
-            num_frames,
-            track_in_reverse,
-            prev_sam_mask_logits,
-        )
+        if self.current_frame_occluded_all:
+            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+                frame_idx,
+                is_init_cond_frame,
+                current_vision_feats_occluded,
+                current_vision_pos_embeds,
+                feat_sizes,
+                # point_inputs,
+                # mask_inputs,
+                output_dict,
+                num_frames,
+                track_in_reverse,
+                prev_sam_mask_logits,
+            )
+        else:
+            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+                frame_idx,
+                is_init_cond_frame,
+                current_vision_feats,
+                current_vision_pos_embeds,
+                feat_sizes,
+                # point_inputs,
+                # mask_inputs,
+                output_dict,
+                num_frames,
+                track_in_reverse,
+                prev_sam_mask_logits,
+            )
         # print("after _track_step pix_feat:", pix_feat.shape, pix_feat)
         # (
         #     low_res_multimasks,
