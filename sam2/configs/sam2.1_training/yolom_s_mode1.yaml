@@ -34,29 +34,29 @@ scratch:
 #   multiplier: 2
 sa1b_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 4
 
 sa1b_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
 sav_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-train/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-train/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
 sav_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/si2/sdragon/visdrone dataset/VisDrone2019-VID-val/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val/sequences/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
@@ -197,7 +197,7 @@ trainer:
     #     fpn_interp_model: nearest
     yolo:
       _target_: sam2.modeling.backbones.yolo.yolo
-      # model: /home/si2/sdragon/sam2/checkpoints/yolov8s.pt
+      # model: /home/user/sdragon/sam2/checkpoints/yolov8s.pt
       cfg: yolov8s.yaml
       nc: ${scratch.nc}
       position_encoding:
@@ -526,7 +526,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m.pt # "/home/si2/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:
