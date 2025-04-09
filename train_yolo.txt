@@ -6,4 +6,4 @@ python training/train.py     -c configs/sam2.1_training/ --use-cluster 0 --num-g
 
 
 
-tensorboard --logdir=tensorboard --port=6006
+tensorboard --logdir=tensorboard --port=6006 --bind_all

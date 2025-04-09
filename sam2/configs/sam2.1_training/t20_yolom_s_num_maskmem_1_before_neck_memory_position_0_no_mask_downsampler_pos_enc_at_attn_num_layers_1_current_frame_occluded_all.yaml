@@ -1,7 +1,7 @@
 # @package _global_
 
 scratch:
-  mode: val #val #train # train_only
+  mode: train #val #train # train_only
   temp_pos_enc: True
   init_cond_frames_mode: 1
   self_memory_encode: True
@@ -295,7 +295,7 @@ trainer:
         no_mask_downsampler: True
         # only_pos: True
 
-    num_maskmem: 2
+    num_maskmem: 1
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -586,7 +586,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

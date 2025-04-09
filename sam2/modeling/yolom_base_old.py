@@ -130,8 +130,6 @@ class YOLOMBase(torch.nn.Module):
         mem_dim: int = -1,
         world: bool = False,
         current_frame_occluded_all: bool = False,
-        prev1_frame_occluded_all: bool = False,
-        prev1_frame_no_memory: bool = False,
     ):
         super().__init__()
 
@@ -263,8 +261,6 @@ class YOLOMBase(torch.nn.Module):
         self.memory_before_16 = memory_before_16
         self.skip_n_frame = skip_n_frame
         self.current_frame_occluded_all = current_frame_occluded_all
-        self.prev1_frame_occluded_all = prev1_frame_occluded_all
-        self.prev1_frame_no_memory = prev1_frame_no_memory
 
         self.world = world 
         if self.world:
@@ -702,7 +698,7 @@ class YOLOMBase(torch.nn.Module):
             # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
             # sys.exit()
             return pix_feat_with_mem, None
-        if (not is_init_cond_frame or self.encode_first_frame or self.encode_frame_first) and not (self.prev1_frame_no_memory and frame_idx == 1):
+        if not is_init_cond_frame or self.encode_first_frame or self.encode_frame_first:
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
             # Add conditioning frames's output first (all cond frames have t_pos=0 for
@@ -766,41 +762,11 @@ class YOLOMBase(torch.nn.Module):
                     # If an unselected conditioning frame is among the last (self.num_maskmem - 1)
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
-                
-                if self.prev1_frame_occluded_all or self.prev1_frame_no_memory:
-                    if out == None:
-                        t_pos_and_prevs.append((t_pos, None))
-                    else:
-                        t_pos_and_prevs.append((t_pos, out.copy()))
-                else:
-                    t_pos_and_prevs.append((t_pos, out))
-                # print("t_pos_and_prevs:", t_pos_and_prevs)
-                # sys.exit()
+                t_pos_and_prevs.append((t_pos, out))
                 # if out != None:
                 #     print(f"{t_pos}, out['maskmem_features']: {out['maskmem_features'][0].shape}, {out['maskmem_features'][0][0][0][0]}")
                 # print("out['maskmem_pos_enc']:", out['maskmem_pos_enc'][0].shape)
             # print("t_pos_and_prevs:", t_pos_and_prevs)
-            # print("t_pos_and_prevs[1]:", t_pos_and_prevs[1])
-
-            # for tpap in t_pos_and_prevs:
-            #     if tpap[1] != None:
-            #         print(f"t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features'][0][0][0][0]}")
-            if self.prev1_frame_occluded_all:
-                t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'] = torch.ones_like(t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'])
-                # print("prev1_frame_occluded_all t_pos_and_prevs:", t_pos_and_prevs)
-                # for tpap in t_pos_and_prevs:
-                #     if tpap[1] != None:
-                #         print(f"prev1_frame_occluded_all t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features'][0][0][0][0]}")
-            if self.prev1_frame_no_memory:
-                # self.num_maskmem-1
-                # print("t_pos_and_prevs[0][1]:", t_pos_and_prevs[0][1])
-                # print("t_pos_and_prevs[1][1]:", t_pos_and_prevs[1][1])
-                # t_pos_and_prevs[self.num_maskmem-1] = (self.num_maskmem-1, t_pos_and_prevs[self.num_maskmem-2][1])
-                # t_pos_and_prevs[self.num_maskmem-2] = (self.num_maskmem-2, None)
-                t_pos_and_prevs[self.num_maskmem-1] = (self.num_maskmem-1, None)
-                # print("prev1_frame_no_memory t_pos_and_prevs:", t_pos_and_prevs)
-                # print("frame_idx:", frame_idx)
-            # # sys.exit()
 
             for t_pos, prev in t_pos_and_prevs:
                 if prev is None:
@@ -825,7 +791,6 @@ class YOLOMBase(torch.nn.Module):
                     # print("maskmem_enc:", maskmem_enc.shape)
                     # print("self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]:",  self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1].shape)
                     # print("self.maskmem_tpos_enc:", self.maskmem_tpos_enc.shape)
-                    # print(f"maskmem_enc {t_pos}", maskmem_enc[0][0][0])
                     # sys.exit()
                 else:
                     # print("self.temp_pos_enc:", self.temp_pos_enc)
@@ -944,12 +909,8 @@ class YOLOMBase(torch.nn.Module):
             memory = torch.cat(to_cat_memory, dim=2)
             memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=2)
         else:
-            # if to_cat_memory:
             memory = torch.cat(to_cat_memory, dim=0)
             memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
-            # else:
-            # memory = current_vision_feats
-            # memory_pos_embed = current_vision_pos_embeds
         # print("memory:", memory.shape)
         # print("memory_pos_embed:", memory_pos_embed.shape)
         # print("num_obj_ptr_tokens:", num_obj_ptr_tokens)

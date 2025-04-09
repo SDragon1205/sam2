@@ -814,7 +814,6 @@ class YOLOMTrain(YOLOMBase):
                     first_backbone_feature = current_vision_feats[0]
                 # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
-                current_vision_feats_occluded = None
                 if self.current_frame_occluded_all:
                     current_vision_feats_occluded = [x[:, img_ids] for x in vision_feats_occluded]
                     # print("current_vision_feats_occluded:", current_vision_feats_occluded[0].shape, current_vision_feats_occluded[0][0][0][0])
