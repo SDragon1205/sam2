@@ -132,6 +132,8 @@ class YOLOMBase(torch.nn.Module):
         current_frame_occluded_all: bool = False,
         prev1_frame_occluded_all: bool = False,
         prev1_frame_no_memory: bool = False,
+        cut_gradient_before_encoder: bool = False,
+        cut_prev2_gradient_before_attention: bool = False,
     ):
         super().__init__()
 
@@ -265,6 +267,8 @@ class YOLOMBase(torch.nn.Module):
         self.current_frame_occluded_all = current_frame_occluded_all
         self.prev1_frame_occluded_all = prev1_frame_occluded_all
         self.prev1_frame_no_memory = prev1_frame_no_memory
+        self.cut_gradient_before_encoder = cut_gradient_before_encoder
+        self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
 
         self.world = world 
         if self.world:
@@ -767,7 +771,7 @@ class YOLOMBase(torch.nn.Module):
                     # frames, we still attend to it as if it's a non-conditioning frame.
                     out = unselected_cond_outputs.get(prev_frame_idx, None)
                 
-                if self.prev1_frame_occluded_all or self.prev1_frame_no_memory:
+                if self.prev1_frame_occluded_all or self.prev1_frame_no_memory or self.cut_prev2_gradient_before_attention:
                     if out == None:
                         t_pos_and_prevs.append((t_pos, None))
                     else:
@@ -785,8 +789,11 @@ class YOLOMBase(torch.nn.Module):
             # for tpap in t_pos_and_prevs:
             #     if tpap[1] != None:
             #         print(f"t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features'][0][0][0][0]}")
+            #     else:
+            #         print(f"t_pos_and_prevs {tpap[0]}: None")
             if self.prev1_frame_occluded_all:
-                t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'] = torch.ones_like(t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'])
+                # t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'] = torch.ones_like(t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'])
+                t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'] = torch.rand_like(t_pos_and_prevs[self.num_maskmem-1][1]['maskmem_features'])
                 # print("prev1_frame_occluded_all t_pos_and_prevs:", t_pos_and_prevs)
                 # for tpap in t_pos_and_prevs:
                 #     if tpap[1] != None:
@@ -800,7 +807,23 @@ class YOLOMBase(torch.nn.Module):
                 t_pos_and_prevs[self.num_maskmem-1] = (self.num_maskmem-1, None)
                 # print("prev1_frame_no_memory t_pos_and_prevs:", t_pos_and_prevs)
                 # print("frame_idx:", frame_idx)
-            # # sys.exit()
+            if self.cut_prev2_gradient_before_attention:
+                # print("prev1_frame_occluded_all")
+                # print("before output_dict:", output_dict)
+                for tpap in t_pos_and_prevs:
+                    if tpap[0] != self.num_maskmem-1 and tpap[1] != None:
+                        # print(f"before t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features']}")
+                        tpap[1]['maskmem_features'] = tpap[1]['maskmem_features'].detach().requires_grad_()
+                        # print(f"after t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features']}")
+                # print("after output_dict:", output_dict)
+            # for tpap in t_pos_and_prevs:
+            #     if tpap[1] != None:
+            #         print(f"t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features'][0][0][0][0]}")
+            #     else:
+            #         print(f"t_pos_and_prevs {tpap[0]}: None")
+            # print("t_pos_and_prevs:", t_pos_and_prevs)
+            # if frame_idx == 2:
+            #     sys.exit()
 
             for t_pos, prev in t_pos_and_prevs:
                 if prev is None:
@@ -1034,6 +1057,19 @@ class YOLOMBase(torch.nn.Module):
             # print("mask_for_mem:", mask_for_mem.shape)
             # sys.exit()
         # pix_feat_clone = pix_feat.clone()
+        # print("before pix_feat:", pix_feat)
+        if self.cut_gradient_before_encoder:
+            pix_feat = pix_feat.detach().requires_grad_()
+            # print("mask_for_mem:", mask_for_mem)
+            if mask_for_mem != torch.tensor([0]):
+                mask_for_mem_clone = mask_for_mem.clone()
+                mask_for_mem = mask_for_mem.detach().requires_grad_()
+                print("need to check original mask_for_mem is change or not")
+                sys.exit()
+            # print("after pix_feat:", pix_feat)
+            # print("current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W):", current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W))
+        #     print("mask_for_mem:", mask_for_mem)
+        # sys.exit()
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )

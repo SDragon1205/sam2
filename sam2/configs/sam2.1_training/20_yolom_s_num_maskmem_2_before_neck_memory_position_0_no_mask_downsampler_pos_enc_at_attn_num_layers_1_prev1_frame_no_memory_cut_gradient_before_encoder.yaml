@@ -369,7 +369,9 @@ trainer:
     # select_frame: 2
     skip_n_frame: 2
     # current_frame_occluded_all: True
-    prev1_frame_occluded_all: True
+    # prev1_frame_occluded_all: True
+    prev1_frame_no_memory: True
+    cut_gradient_before_encoder: True
 
   validator:
     _target_: training.validator.maP50_Validator

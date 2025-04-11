@@ -14,7 +14,7 @@ scratch:
   memory_before_neck: True
   mask_for_mem_sigmoid: False
   use_gt_in_first_frame: False
-  skip_first_frame: False
+  skip_first_frame: True
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10

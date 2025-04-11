@@ -13,3 +13,4 @@ sam2_logs/*
 tmp/*
 grad_graph/*
 *.gz
+*.bak
