@@ -2,7 +2,9 @@
 
 scratch:
   mode: val #val #train # train_only
-  temp_pos_enc: True
+  encode_frame_first: True
+  two_sa: False
+  temp_pos_enc: False
   init_cond_frames_mode: 1
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
@@ -17,7 +19,7 @@ scratch:
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
-  train_num_frames: 21
+  train_num_frames: 20
   val_num_frames: 20
   max_num_objects: 3
   base_lr: 5.0e-6
@@ -260,9 +262,11 @@ trainer:
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-          # kv_in_dim: 128
+          kv_in_dim: 128
         # only_sa: True
+        two_sa: ${scratch.two_sa}
       num_layers: 1
+      two_sa: ${scratch.two_sa}
 
     memory_encoder:
         _target_: sam2.modeling.memory_encoder.MemoryEncoder
@@ -280,7 +284,6 @@ trainer:
           embed_dim: 128
           in_chans: 74
           has_mask_down: False
-        ########################################################
         fuser:
           _target_: sam2.modeling.memory_encoder.Fuser
           layer:
@@ -291,9 +294,10 @@ trainer:
             layer_scale_init_value: 1e-6
             use_dwconv: True  # depth-wise convs
           num_layers: 2
+        ########################################################
         in_dim: 128
-        no_mask_downsampler: True
         # only_pos: True
+        no_mask_downsampler: True
 
     num_maskmem: 2
     image_size: ${scratch.resolution}
@@ -366,12 +370,10 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    # select_frame: 2
-    skip_n_frame: 2
-    # current_frame_occluded_all: True
-    # prev1_frame_occluded_all: True
-    prev1_frame_no_memory: True
-    cut_gradient_before_encoder: True
+    two_sa: ${scratch.two_sa}
+    encode_frame_first: ${scratch.encode_frame_first}
+    # skip_n_frame: 2
+    # prev1_frame_no_memory: true
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -382,7 +384,7 @@ trainer:
     max_det: 300
     agnostic: false
     names: ${scratch.names}
-    # scale_boxes: True
+    
 
   data:
     train:

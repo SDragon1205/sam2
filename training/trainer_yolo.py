@@ -652,7 +652,8 @@ class Trainer_yolo:
         return ret_tuple
 
     def run(self):
-        assert self.mode in ["train", "train_only", "val", "train2"]
+        assert self.mode in ["train", "train_only", "val", "train2", "test"]
+        # print("self.mode:", self.mode)
         self.val_best_map50 = 0
         self.test_best_map50 = 0
         if self.mode == "train":
@@ -681,8 +682,20 @@ class Trainer_yolo:
                     self.run_test()
                     self.epoch += 1
             # self.run_test()
+            # print("#######################################################")
+            # print("debug -3")
+            # print("#######################################################")
             self.run_train()
+            # print("#######################################################", flush=True)
+            # print("debug -2", flush=True)
+            # print("#######################################################", flush=True)
+            # logging.info("#######################################################")
+            # logging.info("debug -2")
+            # logging.info("#######################################################")
             self.run_val()
+            # print("debug -1")
+            self.run_test()
+        elif self.mode == "test":
             self.run_test()
 
     def _setup_dataloaders(self):
@@ -732,8 +745,11 @@ class Trainer_yolo:
 
             # Run val, not running on last epoch since will run after the
             # loop anyway
+            # print("self.is_intermediate_val_epoch(self.epoch):", self.is_intermediate_val_epoch(self.epoch))
+            # sys.exit()
             if self.is_intermediate_val_epoch(self.epoch):
                 self.run_val()
+                self.run_test()
 
             if self.distributed_rank == 0:
                 self.best_meter_values.update(self._get_trainer_state("train"))
@@ -872,6 +888,9 @@ class Trainer_yolo:
 
             if data_iter % 10 == 0:
                 dist.barrier()
+            
+            #debug
+            # break
 
         self.est_epoch_time[phase] = batch_time.avg * iters_per_epoch
         self._log_timers(phase)
@@ -897,7 +916,7 @@ class Trainer_yolo:
         # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
 
         seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
-        if self.mode == "train":
+        if self.mode == "train" or "train2":
             self.logger.log(f"Metrics/val_Images", seen, self.epoch)
             self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
             self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
@@ -915,44 +934,48 @@ class Trainer_yolo:
                 elif self.epoch < 90:
                     self.save_checkpoint(self.epoch + 1)
                     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
-        elif self.mode == "train2":
-            self.logger.log(f"Metrics/val_Images", seen, self.epoch)
-            self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
-            self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
-            self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
-            self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
-            self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
-            # if self.epoch == 70 or self.epoch == 90:
-            #     self.val_best_map50 = 0
-            if result2 > self.val_best_map50:
-                self.save_checkpoint(self.epoch + 1, ["val_best"])
-                # self.save_checkpoint(self.epoch + 1)
-                self.val_best_map50 = result2
-                # if self.epoch < 70:
-                #     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
-                # elif self.epoch < 90:
-                #     self.save_checkpoint(self.epoch + 1)
-                #     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
+        # elif self.mode == "train2":
+        #     self.logger.log(f"Metrics/val_Images", seen, self.epoch)
+        #     self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
+        #     self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
+        #     self.logger.log(f"Metrics/val_Recall", result1, self.epoch)
+        #     self.logger.log(f"Metrics/val_mAP50", result2, self.epoch)
+        #     self.logger.log(f"Metrics/val_mAP50-95", result3, self.epoch)
+        #     # if self.epoch == 70 or self.epoch == 90:
+        #     #     self.val_best_map50 = 0
+        #     if result2 > self.val_best_map50:
+        #         self.save_checkpoint(self.epoch + 1, ["val_best"])
+        #         # self.save_checkpoint(self.epoch + 1)
+        #         self.val_best_map50 = result2
+        #         # if self.epoch < 70:
+        #         #     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
+        #         # elif self.epoch < 90:
+        #         #     self.save_checkpoint(self.epoch + 1)
+        #         #     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
         return out_dict
 
     def run_test(self):
+        # print("debug 0")
         if not self.test_dataset:
             raise ValueError("self.test_dataset error")
             return
-
+        # print("debug 1")
         dataloader = self.test_dataset.get_loader(epoch=int(self.epoch))
+        # print("debug 2")
         outs = self.test_epoch(dataloader, phase=Phase.TEST)
+        # print("debug 3")
         del dataloader
         gc.collect()
         if self.mode == "train" or self.mode == "train2":
             self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0
-
+        # print("debug 4")
         if self.distributed_rank == 0:
             with g_pathmgr.open(
                 os.path.join(self.logging_conf.log_dir, "test_stats.json"),
                 "a",
             ) as f:
                 f.write(json.dumps(outs) + "\n")
+        # print("debug 5")
 
     def test_epoch(self, test_loader, phase):
         batch_time = AverageMeter("Batch Time", self.device, ":.2f")
@@ -1061,6 +1084,9 @@ class Trainer_yolo:
 
             if data_iter % 10 == 0:
                 dist.barrier()
+            
+            #debug
+            # break
 
         self.est_epoch_time[phase] = batch_time.avg * iters_per_epoch
         self._log_timers(phase)
@@ -1239,6 +1265,9 @@ class Trainer_yolo:
             # Catching NaN/Inf errors in the loss
             except FloatingPointError as e:
                 raise e
+            
+            #debug
+            # break
 
         self.est_epoch_time[Phase.TRAIN] = batch_time_meter.avg * iters_per_epoch
         self._log_timers(Phase.TRAIN)

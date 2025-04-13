@@ -134,6 +134,7 @@ class YOLOMBase(torch.nn.Module):
         prev1_frame_no_memory: bool = False,
         cut_gradient_before_encoder: bool = False,
         cut_prev2_gradient_before_attention: bool = False,
+        prev_frame_idx_minus: int = 0,
     ):
         super().__init__()
 
@@ -269,6 +270,7 @@ class YOLOMBase(torch.nn.Module):
         self.prev1_frame_no_memory = prev1_frame_no_memory
         self.cut_gradient_before_encoder = cut_gradient_before_encoder
         self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
+        self.prev_frame_idx_minus = prev_frame_idx_minus
 
         self.world = world 
         if self.world:
@@ -761,7 +763,7 @@ class YOLOMBase(torch.nn.Module):
                         prev_frame_idx = prev_frame_idx + (t_rel - 2) * stride
                 # print(f"t_pos, prev_frame_idx:, {t_pos}, {prev_frame_idx}")
                 # print("prev_frame_idx:", prev_frame_idx)
-                out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx, None)
+                out = output_dict["non_cond_frame_outputs"].get(prev_frame_idx-self.prev_frame_idx_minus, None)
                 # print("prev_frame_idx:", prev_frame_idx)
                 # print("out:", out)
                 # out["maskmem_features"].name = f"memory_{prev_frame_idx}"
@@ -778,6 +780,7 @@ class YOLOMBase(torch.nn.Module):
                         t_pos_and_prevs.append((t_pos, out.copy()))
                 else:
                     t_pos_and_prevs.append((t_pos, out))
+                    # print("out:", out)
                 # print("t_pos_and_prevs:", t_pos_and_prevs)
                 # sys.exit()
                 # if out != None:
@@ -816,9 +819,10 @@ class YOLOMBase(torch.nn.Module):
                         tpap[1]['maskmem_features'] = tpap[1]['maskmem_features'].detach().requires_grad_()
                         # print(f"after t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features']}")
                 # print("after output_dict:", output_dict)
+
             # for tpap in t_pos_and_prevs:
             #     if tpap[1] != None:
-            #         print(f"t_pos_and_prevs {tpap[0]}: {tpap[1]['maskmem_features'][0][0][0][0]}")
+            #         print(f"t_pos_and_prevs {tpap[0]}:", tpap[1]['maskmem_features'][0][0][0][0])
             #     else:
             #         print(f"t_pos_and_prevs {tpap[0]}: None")
             # print("t_pos_and_prevs:", t_pos_and_prevs)
@@ -968,7 +972,20 @@ class YOLOMBase(torch.nn.Module):
             memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=2)
         else:
             # if to_cat_memory:
-            memory = torch.cat(to_cat_memory, dim=0)
+            try:
+                memory = torch.cat(to_cat_memory, dim=0)
+            except RuntimeError as e:
+                pix_feat_with_mem = current_vision_feats[-1] + self.no_mem_embed
+                # print("yes")
+                pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+                # print("pix_feat_with_mem0:", pix_feat_with_mem.shape, pix_feat_with_mem)
+                current_bank = None
+                if self.fuse_backbone_and_bank:
+                    current_bank = pix_feat_with_mem
+                    # print("0 current_bank:", current_bank.shape, current_bank[0][0][0][0])
+                # sys.exit()
+                return pix_feat_with_mem, current_bank
+            
             memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
             # else:
             # memory = current_vision_feats
@@ -1085,7 +1102,7 @@ class YOLOMBase(torch.nn.Module):
         #     ) * self.no_obj_embed_spatial[..., None, None].expand(
         #         *maskmem_features.shape
         #     )
-        # print("maskmem_features:", maskmem_features)
+        # print("_encode_new_memory maskmem_features:", maskmem_features[0][0][0][0])
         # print("maskmem_pos_enc:", maskmem_pos_enc)
         # sys.exit()
         return maskmem_features, maskmem_pos_enc

@@ -16,6 +16,7 @@ class yolo(nn.Module):
         transformer_dim: int = 512,
         norm_type: str = "",
         activation: Type[nn.Module] = nn.GELU,
+        world: bool = False,
     ):
         super().__init__()
         self.detection_model = DetectionModel(cfg=cfg, ch=3, nc=nc, verbose=True)
