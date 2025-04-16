@@ -749,7 +749,8 @@ class Trainer_yolo:
             # sys.exit()
             if self.is_intermediate_val_epoch(self.epoch):
                 self.run_val()
-                self.run_test()
+                if self.mode == "train2":
+                    self.run_test()
 
             if self.distributed_rank == 0:
                 self.best_meter_values.update(self._get_trainer_state("train"))

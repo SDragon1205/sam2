@@ -515,6 +515,7 @@ class YOLOMBase(torch.nn.Module):
         self,
         backbone_features,
         # high_res_features,
+        txt_feats,
     ):
         """
         Forward SAM prompt encoders and mask heads.
@@ -540,16 +541,30 @@ class YOLOMBase(torch.nn.Module):
         #     image_embeddings=backbone_features,
         #     high_res_features=high_res_features,
         # )
-        if self.memory_before_16:
-            x_preds = self.yolo.forward_16_head(backbone_features)
-        elif self.memory_before_neck:
-            x_preds = self.yolo.forward_neck_head(backbone_features)
-            # print("self.yolo.forward_neck_head")
-            # print("x_preds[0]:", x_preds[0].shape)
-            # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
-            # print("x_preds[1]:", x_preds[0].shape, x_preds[1].shape, x_preds[2].shape)
+        if self.world:
+            if self.memory_before_16:
+                # x_preds = self.yolo.forward_16_head_world(backbone_features)
+                raise ValueError('forward_16_head_world not implement')
+            elif self.memory_before_neck:
+                x_preds = self.yolo.forward_neck_head_world(x_list=backbone_features, txt_feats=txt_feats)
+                # print("self.yolo.forward_neck_head_world")
+                # print("x_preds[0]:", x_preds[0].shape)
+                # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
+                # print("x_preds[1]:", x_preds[0].shape, x_preds[1].shape, x_preds[2].shape)
+            else:
+                # x_preds = self.yolo.forward_head_world(backbone_features)
+                raise ValueError('forward_head_world not implement')
         else:
-            x_preds = self.yolo.forward_head(backbone_features)
+            if self.memory_before_16:
+                x_preds = self.yolo.forward_16_head(backbone_features)
+            elif self.memory_before_neck:
+                x_preds = self.yolo.forward_neck_head(backbone_features)
+                # print("self.yolo.forward_neck_head")
+                # print("x_preds[0]:", x_preds[0].shape)
+                # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
+                # print("x_preds[1]:", x_preds[0].shape, x_preds[1].shape, x_preds[2].shape)
+            else:
+                x_preds = self.yolo.forward_head(backbone_features)
         
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
@@ -624,15 +639,30 @@ class YOLOMBase(torch.nn.Module):
         """Get the image feature on the input batch."""
         # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
-        if self.memory_before_16:
-            backbone_out = self.yolo.forward_backbone_15(img_batch)
-        elif self.memory_before_neck:
-            backbone_out = self.yolo.forward_backbone(img_batch)
-            # print("self.yolo.forward_backbone")
-            # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
-            # print("backbone_out['backbone_fpn'][0]:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][0])
+        if self.world:
+            if self.memory_before_16:
+                # need txt_feats
+                # backbone_out = self.yolo.forward_backbone_15_world(img_batch, txt_feats=txt_feats)
+                raise ValueError('forward_backbone_15_world not implement')
+            elif self.memory_before_neck:
+                backbone_out = self.yolo.forward_backbone_world(img_batch)
+                # print("self.yolo.forward_backbone_world")
+                # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
+                # print("backbone_out['backbone_fpn'][0]:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][0])
+            else:
+                # need txt_feats
+                # backbone_out = self.yolo.forward_backbone_neck_world(img_batch, txt_feats=txt_feats)
+                raise ValueError('forward_backbone_neck_world not implement')
         else:
-            backbone_out = self.yolo.forward_backbone_neck(img_batch)
+            if self.memory_before_16:
+                backbone_out = self.yolo.forward_backbone_15(img_batch)
+            elif self.memory_before_neck:
+                backbone_out = self.yolo.forward_backbone(img_batch)
+                # print("self.yolo.forward_backbone")
+                # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
+                # print("backbone_out['backbone_fpn'][0]:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][0])
+            else:
+                backbone_out = self.yolo.forward_backbone_neck(img_batch)
         # gt_yolo_out = self.freeze_model.model._predict_once(img_batch)
         # print("gt_yolo_out[0]:", gt_yolo_out[0].shape)
         # print("gt_yolo_out[1]:", gt_yolo_out[1][0].shape, gt_yolo_out[1][1].shape, gt_yolo_out[1][2].shape)
@@ -1120,6 +1150,7 @@ class YOLOMBase(torch.nn.Module):
         num_frames,
         track_in_reverse,
         prev_sam_mask_logits,
+        txt_feats,
     ):
         # print("_track_step current_vision_feats:", current_vision_feats[0][0][0][0])
         # current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
@@ -1229,11 +1260,11 @@ class YOLOMBase(torch.nn.Module):
         # print("pix_feat:", pix_feat.shape)
         # print("high_res_features:", high_res_features[0].shape, high_res_features[1].shape)
         if self.memory_position == 0: 
-            yolo_outputs = self._forward_yolo_back([pix_feat, high_res_features[0], high_res_features[1]])
+            yolo_outputs = self._forward_yolo_back([pix_feat, high_res_features[0], high_res_features[1]], txt_feats)
         elif self.memory_position == 1: 
-            yolo_outputs = self._forward_yolo_back([high_res_features[0], pix_feat, high_res_features[1]])
+            yolo_outputs = self._forward_yolo_back([high_res_features[0], pix_feat, high_res_features[1]], txt_feats)
         else:
-            yolo_outputs = self._forward_yolo_back([high_res_features[0], high_res_features[1], pix_feat])
+            yolo_outputs = self._forward_yolo_back([high_res_features[0], high_res_features[1], pix_feat], txt_feats)
         # print("yolo_outputs[0]:", yolo_outputs[0].shape)
         # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
         # print("torch.equal(pix_feat, pix_feat_clone):", torch.equal(pix_feat, pix_feat_clone))

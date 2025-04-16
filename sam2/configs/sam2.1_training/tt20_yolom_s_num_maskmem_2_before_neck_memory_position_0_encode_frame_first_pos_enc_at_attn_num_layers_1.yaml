@@ -1,10 +1,10 @@
 # @package _global_
 
 scratch:
-  mode: val #val #train # train_only
+  mode: train2 #val #train # train_only
   encode_frame_first: True
-  two_sa: False
-  temp_pos_enc: False
+  # two_sa: False
+  temp_pos_enc: True
   init_cond_frames_mode: 1
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
@@ -264,9 +264,9 @@ trainer:
           dropout: 0.1
           kv_in_dim: 128
         # only_sa: True
-        two_sa: ${scratch.two_sa}
+        # two_sa: ${scratch.two_sa}
       num_layers: 1
-      two_sa: ${scratch.two_sa}
+      # two_sa: ${scratch.two_sa}
 
     memory_encoder:
         _target_: sam2.modeling.memory_encoder.MemoryEncoder
@@ -299,7 +299,7 @@ trainer:
         # only_pos: True
         no_mask_downsampler: True
 
-    num_maskmem: 1
+    num_maskmem: 2
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -370,9 +370,8 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    two_sa: ${scratch.two_sa}
+    # two_sa: ${scratch.two_sa}
     encode_frame_first: ${scratch.encode_frame_first}
-    skip_n_frame: 2
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -452,14 +451,31 @@ trainer:
       #   transforms: ${vos_val.train_transforms}
       #   multiplier: ${sa1b_dataset_val.multiplier}
 
-      # # val
-      # # SA-V as an example of a video dataset
+      # val
+      # SA-V as an example of a video dataset
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: False
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+          img_folder: ${sav_dataset_val.img_folder}
+          gt_folder: ${sav_dataset_val.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.val_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          val: True
+        transforms: ${vos_val.train_transforms}
+        multiplier: ${sav_dataset_val.multiplier}
+
+      # # test sav_dataset_test
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
       #   training: False
       #   video_dataset:
       #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-      #     img_folder: ${sav_dataset_val.img_folder}
-      #     gt_folder: ${sav_dataset_val.gt_folder}
+      #     img_folder: ${sav_dataset_test.img_folder}
+      #     gt_folder: ${sav_dataset_test.gt_folder}
       #     # file_list_txt: ${path_to_train_filelist} # Optional
       #     # ann_every: 4
       #   sampler:
@@ -468,8 +484,21 @@ trainer:
       #     reverse_time_prob: 0 # probability to reverse video
       #     val: True
       #   transforms: ${vos_val.train_transforms}
-      #   multiplier: ${sav_dataset_val.multiplier}
-
+      #   multiplier: ${sav_dataset_test.multiplier}
+      shuffle: False
+      num_workers: ${scratch.num_train_workers}
+      pin_memory: True
+      drop_last: True
+      collate_fn:
+        _target_: training.utils.data_utils.collate_fn_yolo
+        _partial_: true
+        dict_key: val #all
+    test:
+      _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset 
+      phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
+      batch_sizes: # List of batch sizes corresponding to each dataset
+      - 1 # Batch size of dataset 1
+      datasets:
       # test sav_dataset_test
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: False
@@ -493,7 +522,7 @@ trainer:
       collate_fn:
         _target_: training.utils.data_utils.collate_fn_yolo
         _partial_: true
-        dict_key: val #all
+        dict_key: test #all
 
     distributed:
       backend: nccl
@@ -562,6 +591,14 @@ trainer:
       box: 7.5
       cls: 0.5
       dfl: 1.5
+    test:
+      _target_: training.loss_fns.DetectionLoss
+      nc: ${scratch.nc}  # 假设检测类别数为 80
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      stride: ${scratch.stride}
+      box: 7.5
+      cls: 0.5
+      dfl: 1.5
 
 
   distributed:
@@ -590,7 +627,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

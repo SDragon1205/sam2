@@ -723,7 +723,7 @@ class YOLOMTrain(YOLOMBase):
     # 8: "bus"
     # 9: "motor"
             txt_feats.append(transform({"cls":cls[batch_idx == i], "texts": [('pedestrian',), ('people',), ('bicycle',), ('car',), ('van',), ('truck',), ('tricycle',), ('awning-tricycle',), ('bus',), ('motor',)]})["texts"])
-            print("txt_feats:", txt_feats)
+            # print("txt_feats:", txt_feats)
             if consistent_transform:
                 return txt_feats
             # sys.exit()
@@ -733,19 +733,26 @@ class YOLOMTrain(YOLOMBase):
         if self.training:
             batch_texts = self.get_texts(cls, batch_idx, consistent_transform=consistent_transform)
         else:
-            batch_texts = ['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']
+            batch_texts = [['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']]
+        # print("batch_texts:", batch_texts)
         texts = list(itertools.chain(*batch_texts))
-        text_token = self.clip.tokenize(texts).to(cls.device)
+        # print("texts:", texts)
+        # print("cls:", cls.device)
+        text_token = self.clip.tokenize(texts).to(self.device) #cls.device)
+        # print("text_token:", text_token.device)
         txt_feats = self.text_model.encode_text(text_token).to(dtype=torch.float32) #batch["img"].dtype)  # torch.float32
         txt_feats = txt_feats / txt_feats.norm(p=2, dim=-1, keepdim=True)
+        # print("txt_feats:", txt_feats.shape)
+        # print("len(batch_texts):", len(batch_texts))
         txt_feats = txt_feats.reshape(len(batch_texts), -1, txt_feats.shape[-1])
-        print("txt_feats:", txt_feats)
-        sys.exit()
+        # print("txt_feats:", txt_feats.shape, txt_feats)
+        # sys.exit()
         return txt_feats
     
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False, occluded_feats=None,
     ):
+        txt_feats = None
         if self.world:
             txt_feats = self.get_txt_feats(input.gtdata["cls"], input.gtdata["batch_idx"], consistent_transform=True)
         """Forward video tracking on each frame (and sample correction clicks)."""
@@ -848,6 +855,7 @@ class YOLOMTrain(YOLOMBase):
                 init_cond_frames_gt=init_cond_frames_gt,
                 img_ids=img_ids,
                 current_vision_feats_occluded=current_vision_feats_occluded,
+                txt_feats=txt_feats,
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames #or (
@@ -973,6 +981,7 @@ class YOLOMTrain(YOLOMBase):
         # gt_masks=None,
         init_cond_frames_gt=None,
         current_vision_feats_occluded=None,
+        txt_feats=None,
     ):
         if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first:
             current_out = self._encode_memory_in_output(
@@ -1011,6 +1020,7 @@ class YOLOMTrain(YOLOMBase):
                 num_frames,
                 track_in_reverse,
                 prev_sam_mask_logits,
+                txt_feats,
             )
         else:
             yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
@@ -1025,6 +1035,7 @@ class YOLOMTrain(YOLOMBase):
                 num_frames,
                 track_in_reverse,
                 prev_sam_mask_logits,
+                txt_feats,
             )
         # print("after _track_step pix_feat:", pix_feat.shape, pix_feat)
         # (

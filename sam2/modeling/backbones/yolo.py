@@ -2,9 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
-from ultralytics.nn.tasks import DetectionModel
+from ultralytics.nn.tasks import DetectionModel, WorldModel
 from ultralytics import YOLO
 from typing import List, Optional, Tuple, Type
+from ultralytics.nn.modules import (
+    C2fAttn,
+    ImagePoolingAttn,
+    WorldDetect,
+)
+from ultralytics.utils.plotting import feature_visualization
 
 class yolo(nn.Module):
     def __init__(
@@ -19,7 +25,10 @@ class yolo(nn.Module):
         world: bool = False,
     ):
         super().__init__()
-        self.detection_model = DetectionModel(cfg=cfg, ch=3, nc=nc, verbose=True)
+        if world == True:
+            self.detection_model = WorldModel(cfg=cfg, ch=3, nc=nc, verbose=True)
+        else:
+            self.detection_model = DetectionModel(cfg=cfg, ch=3, nc=nc, verbose=True)
         self.position_encoding = position_encoding
         self.has_output_upscaling = has_output_upscaling
         if has_output_upscaling:
@@ -50,6 +59,128 @@ class yolo(nn.Module):
             else:
                 print("yolo norm_type error!")
                 sys.exit()
+    
+    def forward_backbone_world(self, x, profile=False, visualize=False, txt_feats=None, augment=False, embed=None):
+        """
+        Perform a forward pass through the model.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+            profile (bool): If True, profile the computation time for each layer.
+            visualize (bool): If True, save feature maps for visualization.
+            txt_feats (torch.Tensor, optional): The text features, use it if it's given.
+            augment (bool): If True, perform data augmentation during inference.
+            embed (list, optional): A list of feature vectors/embeddings to return.
+
+        Returns:
+            (torch.Tensor): Model's output tensor.
+        """
+        # txt_feats = (self.txt_feats if txt_feats is None else txt_feats).to(device=x.device, dtype=x.dtype)
+        # if len(txt_feats) != len(x) or self.model[-1].export:
+        #     txt_feats = txt_feats.expand(x.shape[0], -1, -1)
+        # ori_txt_feats = txt_feats.clone()
+        y, dt, embeddings = [], [], []  # outputs
+        pos = []
+        backbone_fpn = []
+        for i_m in range(10):
+            m = self.detection_model.model[i_m]
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            if profile:
+                self.detection_model._profile_one_layer(m, x, dt)
+            # if isinstance(m, C2fAttn):
+            #     print("C2fAttn")
+            #     x = m(x, txt_feats)
+            # elif isinstance(m, WorldDetect):
+            #     print("C2fAttn")
+            #     x = m(x, ori_txt_feats)
+            # elif isinstance(m, ImagePoolingAttn):
+            #     print("C2fAttn")
+            #     txt_feats = m(x, txt_feats)
+            # else:
+            x = m(x)  # run
+
+            y.append(x if m.i in self.detection_model.save else None)  # save output
+            if m.i in self.detection_model.save:
+                backbone_fpn.append(x)
+                pos.append(self.position_encoding(x).to(x.dtype))
+
+            if visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+            if embed and m.i in embed:
+                embeddings.append(torch.nn.functional.adaptive_avg_pool2d(x, (1, 1)).squeeze(-1).squeeze(-1))  # flatten
+                if m.i == max(embed):
+                    return torch.unbind(torch.cat(embeddings, 1), dim=0)
+        output = {
+            "backbone_fpn": backbone_fpn,
+            "vision_pos_enc": pos,
+        }
+        return output
+    
+    def forward_neck_head_world(self, x_list, profile=False, visualize=False, txt_feats=None, augment=False, embed=None):
+        """
+        Perform a forward pass through the model.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+            profile (bool): If True, profile the computation time for each layer.
+            visualize (bool): If True, save feature maps for visualization.
+            txt_feats (torch.Tensor, optional): The text features, use it if it's given.
+            augment (bool): If True, perform data augmentation during inference.
+            embed (list, optional): A list of feature vectors/embeddings to return.
+
+        Returns:
+            (torch.Tensor): Model's output tensor.
+        """
+        # txt_feats = (self.txt_feats if txt_feats is None else txt_feats).to(device=x_list[0].device, dtype=x_list[0].dtype)
+        if txt_feats is None:
+            raise ValueError('txt_feats is None in forward_neck_head_world')
+        txt_feats = txt_feats.to(device=x_list[0].device, dtype=x_list[0].dtype)
+        # print("txt_feats:", txt_feats.shape, txt_feats)
+        # print("self.detection_model.model[-1].export:", self.detection_model.model[-1].export)
+        # sys.exit()
+        if len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export:
+            raise ValueError('len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export: use clone to input txt_feats on forward_neck_head_world function, 因為其他frame的txt_feats和ori_txt_feats會被影響')
+            txt_feats = txt_feats.expand(x_list[0].shape[0], -1, -1)
+        ori_txt_feats = txt_feats.clone()
+
+        y, dt, embeddings = [], [], []  # outputs
+        i_x = 0
+        for i_m in range(10):
+            m = self.detection_model.model[i_m]
+            if m.i in self.detection_model.save:
+                y.append(x_list[i_x])
+                i_x = i_x + 1
+            else:
+                y.append(None)
+        x = x_list[2]
+
+        for i_m in range(10, 23):
+            m = self.detection_model.model[i_m]
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            if profile:
+                self.detection_model._profile_one_layer(m, x, dt)
+            if isinstance(m, C2fAttn):
+                # print("C2fAttn")
+                x = m(x, txt_feats)
+            elif isinstance(m, WorldDetect):
+                # print("WorldDetect")
+                x = m(x, ori_txt_feats)
+            elif isinstance(m, ImagePoolingAttn):
+                # print("ImagePoolingAttn")
+                txt_feats = m(x, txt_feats)
+            else:
+                x = m(x)  # run
+
+            y.append(x if m.i in self.detection_model.save else None)  # save output
+            if visualize:
+                feature_visualization(x, m.type, m.i, save_dir=visualize)
+            if embed and m.i in embed:
+                embeddings.append(torch.nn.functional.adaptive_avg_pool2d(x, (1, 1)).squeeze(-1).squeeze(-1))  # flatten
+                if m.i == max(embed):
+                    return torch.unbind(torch.cat(embeddings, 1), dim=0)
+        return x
 
     def forward_backbone(self, x: torch.Tensor):
         """
