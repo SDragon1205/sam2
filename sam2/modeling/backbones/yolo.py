@@ -137,7 +137,7 @@ class yolo(nn.Module):
             raise ValueError('txt_feats is None in forward_neck_head_world')
         txt_feats = txt_feats.to(device=x_list[0].device, dtype=x_list[0].dtype)
         # print("txt_feats:", txt_feats.shape, txt_feats)
-        # print("self.detection_model.model[-1].export:", self.detection_model.model[-1].export)
+        # # print("self.detection_model.model[-1].export:", self.detection_model.model[-1].export)
         # sys.exit()
         if len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export:
             raise ValueError('len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export: use clone to input txt_feats on forward_neck_head_world function, 因為其他frame的txt_feats和ori_txt_feats會被影響')
@@ -154,6 +154,7 @@ class yolo(nn.Module):
             else:
                 y.append(None)
         x = x_list[2]
+        # print("x_list[2]:", x_list[2].shape)
 
         for i_m in range(10, 23):
             m = self.detection_model.model[i_m]

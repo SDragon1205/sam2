@@ -692,7 +692,7 @@ class YOLOMTrain(YOLOMBase):
 
         return (filtered_outputs[0], filtered_nested)
     
-    def get_texts(self, cls, batch_idx, consistent_transform=True):
+    def get_texts(self, cls, batch_idx, batch_size, consistent_transform=True):
         transform = RandomLoadText(
                 max_samples=min(10, 80),
                 padding=True,
@@ -724,16 +724,18 @@ class YOLOMTrain(YOLOMBase):
     # 9: "motor"
             txt_feats.append(transform({"cls":cls[batch_idx == i], "texts": [('pedestrian',), ('people',), ('bicycle',), ('car',), ('van',), ('truck',), ('tricycle',), ('awning-tricycle',), ('bus',), ('motor',)]})["texts"])
             # print("txt_feats:", txt_feats)
+            # print("txt_feats* batch_size:", txt_feats* batch_size)
+            # sys.exit()
             if consistent_transform:
-                return txt_feats
+                return txt_feats * batch_size
             # sys.exit()
         return txt_feats
     
-    def get_txt_feats(self, cls, batch_idx, consistent_transform=True):
+    def get_txt_feats(self, cls, batch_idx, batch_size, consistent_transform=True):
         if self.training:
-            batch_texts = self.get_texts(cls, batch_idx, consistent_transform=consistent_transform)
+            batch_texts = self.get_texts(cls, batch_idx, batch_size, consistent_transform=consistent_transform)
         else:
-            batch_texts = [['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']]
+            batch_texts = [['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']] * batch_size
         # print("batch_texts:", batch_texts)
         texts = list(itertools.chain(*batch_texts))
         # print("texts:", texts)
@@ -746,15 +748,19 @@ class YOLOMTrain(YOLOMBase):
         # print("len(batch_texts):", len(batch_texts))
         txt_feats = txt_feats.reshape(len(batch_texts), -1, txt_feats.shape[-1])
         # print("txt_feats:", txt_feats.shape, txt_feats)
+        # for p in self.text_model.parameters():
+        #         print("p.requires_grad:", p.requires_grad)
         # sys.exit()
         return txt_feats
     
     def forward_tracking(
         self, backbone_out, input: BatchedVideoDatapoint_yolo, return_dict=False, occluded_feats=None,
     ):
+        batch_size = backbone_out['backbone_fpn'][0].shape[0]
+        # print("backbone_out['backbone_fpn'][0].shape[0]:", backbone_out['backbone_fpn'][0].shape[0])
         txt_feats = None
         if self.world:
-            txt_feats = self.get_txt_feats(input.gtdata["cls"], input.gtdata["batch_idx"], consistent_transform=True)
+            txt_feats = self.get_txt_feats(input.gtdata["cls"], input.gtdata["batch_idx"], batch_size=batch_size, consistent_transform=self.text_consistent)
         """Forward video tracking on each frame (and sample correction clicks)."""
         img_feats_already_computed = backbone_out["backbone_fpn"] is not None
         if img_feats_already_computed:
@@ -780,7 +786,7 @@ class YOLOMTrain(YOLOMBase):
             "non_cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
         }
 
-        batch_size = backbone_out['backbone_fpn'][0].shape[0]
+        # batch_size = backbone_out['backbone_fpn'][0].shape[0]
         hw_size0 = backbone_out['backbone_fpn'][0].shape[2]
         hw_size1 = backbone_out['backbone_fpn'][1].shape[2]
         hw_size2 = backbone_out['backbone_fpn'][2].shape[2]
@@ -804,6 +810,7 @@ class YOLOMTrain(YOLOMBase):
         for stage_id in processing_order:
             # print("==================================================================")
             # print("stage_id:", stage_id)
+            # print("txt_feats[stage_id].unsqueeze(0):", txt_feats[stage_id].unsqueeze(0).shape)
             # Get the image features for the current frames
             # img_ids = input.find_inputs[stage_id].img_ids
             img_ids = input.flat_obj_to_img_idx[stage_id]
@@ -855,7 +862,7 @@ class YOLOMTrain(YOLOMBase):
                 init_cond_frames_gt=init_cond_frames_gt,
                 img_ids=img_ids,
                 current_vision_feats_occluded=current_vision_feats_occluded,
-                txt_feats=txt_feats,
+                txt_feats=txt_feats[stage_id].unsqueeze(0),
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames #or (

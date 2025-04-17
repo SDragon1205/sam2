@@ -135,6 +135,7 @@ class YOLOMBase(torch.nn.Module):
         cut_gradient_before_encoder: bool = False,
         cut_prev2_gradient_before_attention: bool = False,
         prev_frame_idx_minus: int = 0,
+        text_consistent: bool = True,
     ):
         super().__init__()
 
@@ -271,6 +272,7 @@ class YOLOMBase(torch.nn.Module):
         self.cut_gradient_before_encoder = cut_gradient_before_encoder
         self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
         self.prev_frame_idx_minus = prev_frame_idx_minus
+        self.text_consistent = text_consistent
 
         self.world = world 
         if self.world:
@@ -571,8 +573,16 @@ class YOLOMBase(torch.nn.Module):
         # sys.exit()
         # print("ch:", self.yolo.detection_model.model[22].cv2)
         # print("stride:", self.yolo.detection_model.model[22].stride)
+        # print("self.yolo.detection_model.model[22]:", self.yolo.detection_model.model[22])
+        # print("self.yolo.detection_model.model[22].no:", self.yolo.detection_model.model[22].no)
+        # print("self.yolo.detection_model.model[22].nc:", self.yolo.detection_model.model[22].nc)
+        # print("self.yolo.detection_model.model[22].reg_max:", self.yolo.detection_model.model[22].reg_max)
+        # sys.exit()
         if not self.training:
             return x_preds
+        
+        if self.world: # self.nc could be changed when inference with different texts
+            self.yolo.detection_model.model[22].no = self.yolo.detection_model.model[22].nc + self.yolo.detection_model.model[22].reg_max * 4
         # print("self.training:", self.training)
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
