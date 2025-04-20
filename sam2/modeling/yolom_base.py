@@ -136,6 +136,11 @@ class YOLOMBase(torch.nn.Module):
         cut_prev2_gradient_before_attention: bool = False,
         prev_frame_idx_minus: int = 0,
         text_consistent: bool = True,
+        text_pos_shuffle: bool = False,
+        image_dataset: bool = False,
+        text_max_samples: int = -1,
+        text_val_all: bool = True,
+        text_only_pos: bool = False,
     ):
         super().__init__()
 
@@ -273,6 +278,14 @@ class YOLOMBase(torch.nn.Module):
         self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
         self.prev_frame_idx_minus = prev_frame_idx_minus
         self.text_consistent = text_consistent
+        self.text_pos_shuffle = text_pos_shuffle
+        self.image_dataset = image_dataset
+        if  text_max_samples == -1:
+            self.text_max_samples = detect_nc
+        else:
+            self.text_max_samples = text_max_samples
+        self.text_val_all = text_val_all
+        self.text_only_pos = text_only_pos
 
         self.world = world 
         if self.world:

@@ -1,9 +1,19 @@
 # @package _global_
 
 scratch:
-  mode: val #train #val # train_only
+  mode: train #val #train # train_only
+  temp_pos_enc: True
   init_cond_frames_mode: 2
-  skip_first_frame: True
+  self_memory_encode: True
+  use_origin_yolo_outputs_encode: False
+  memory_position: 0
+  has_cond_frame_outputs: False
+
+  use_gt_in_all_frame: False
+  memory_before_neck: True
+  mask_for_mem_sigmoid: False
+  use_gt_in_first_frame: False
+  skip_first_frame: False
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 10
@@ -41,7 +51,7 @@ sa1b_dataset_train:
   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
   multiplier: 1
-  train_batch_size: 4
+  train_batch_size: 20
 
 sa1b_dataset_val:
   # PATHS to Dataset
@@ -179,7 +189,7 @@ vos_val:
 
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
-  mode: ${scratch.mode} #train #val # train_only
+  mode: ${scratch.mode} #val # train_only
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -209,78 +219,84 @@ trainer:
     yolo:
       _target_: sam2.modeling.backbones.yolo.yolo
       # model: /home/user/sdragon/sam2/checkpoints/yolov8s.pt
-      cfg: yolov8s.yaml
+      cfg: yolov8s-worldv2.yaml
       nc: ${scratch.nc}
       position_encoding:
         _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-        num_pos_feats: 512
+        num_pos_feats: 128
         normalize: true
         scale: null
         temperature: 10000
+      has_output_upscaling: False
+      norm_type: group
+      world: True
 
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
-      d_model: 512
-      pos_enc_at_input: true
+      d_model: 128
+      pos_enc_at_input: false
       layer:
         _target_: sam2.modeling.memory_attention.MemoryAttentionLayer
         activation: relu
         dim_feedforward: 2048
         dropout: 0.1
-        pos_enc_at_attn: false
+        pos_enc_at_attn: true
         self_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [20, 20]
-          embedding_dim: 512
+          feat_sizes: [80, 80]
+          embedding_dim: 128
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-        d_model: 512
+        d_model: 128
         pos_enc_at_cross_attn_keys: true
         pos_enc_at_cross_attn_queries: false
         cross_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
-          feat_sizes: [20, 20]
+          feat_sizes: [80, 80]
           rope_k_repeat: True
-          embedding_dim: 512
+          embedding_dim: 128
           num_heads: 1
           downsample_rate: 1
           dropout: 0.1
-          kv_in_dim: 64
-      num_layers: 4
+          # kv_in_dim: 128
+        # only_sa: True
+      num_layers: 1
 
     memory_encoder:
         _target_: sam2.modeling.memory_encoder.MemoryEncoder
-        out_dim: 64
+        out_dim: 128
         position_encoding:
           _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-          num_pos_feats: 64
+          num_pos_feats: 128
           normalize: true
           scale: null
           temperature: 10000
+        # ignore
+        ########################################################
         mask_downsampler:
           _target_: sam2.modeling.memory_encoder.MaskDownSampler
-          embed_dim: 512
-          kernel_size: 3
-          stride: 2
-          padding: 1
-          total_stride: 32
-          in_chans: ${scratch.nc}
+          embed_dim: 128
+          in_chans: 74
+          has_mask_down: False
+        ########################################################
         fuser:
           _target_: sam2.modeling.memory_encoder.Fuser
           layer:
             _target_: sam2.modeling.memory_encoder.CXBlock
-            dim: 512
+            dim: 128
             kernel_size: 7
             padding: 3
             layer_scale_init_value: 1e-6
             use_dwconv: True  # depth-wise convs
           num_layers: 2
-        in_dim: 512
+        in_dim: 128
+        no_mask_downsampler: True
+        # only_pos: True
 
-    num_maskmem: 7
+    num_maskmem: 1
     image_size: ${scratch.resolution}
     # apply scaled sigmoid on mask logits for memory encoder, and directly feed input mask as output mask
     sigmoid_scale_for_mem_enc: 20.0
@@ -330,20 +346,33 @@ trainer:
     rand_init_cond_frames_for_train: True  # random 1~2
     num_correction_pt_per_frame: 7
     use_act_ckpt_iterative_pt_sampling: false
-    # select_frame: 2
-    # skip_n_frame: 2
     
 
     
     num_init_cond_frames_for_eval: 1  # only mask on the first frame
     forward_backbone_per_frame_for_eval: True
 
-    hidden_dim: 512
+    hidden_dim: 128
     # detect_nc: ${scratch.nc}
     # detect_ch: ${scratch.ch}
     # detect_stride: ${scratch.stride}
     init_cond_frames_mode: ${scratch.init_cond_frames_mode}
+    mask_for_mem_sigmoid: ${scratch.mask_for_mem_sigmoid}
+    use_gt_in_first_frame: ${scratch.use_gt_in_first_frame}
     skip_first_frame: ${scratch.skip_first_frame}
+    memory_before_neck: ${scratch.memory_before_neck}
+    use_gt_in_all_frame: ${scratch.use_gt_in_all_frame}
+    has_cond_frame_outputs: ${scratch.has_cond_frame_outputs}
+    memory_position: ${scratch.memory_position}
+    use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
+    self_memory_encode: ${scratch.self_memory_encode}
+    temp_pos_enc: ${scratch.temp_pos_enc}
+    # select_frame: 2
+    # skip_n_frame: 2
+    world: True
+    text_consistent: False
+    text_pos_shuffle: True
+    image_dataset: True
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -355,44 +384,43 @@ trainer:
     agnostic: false
     names: ${scratch.names}
     # scale_boxes: True
-    # skip_none_gt: False
 
   data:
     train:
       _target_: training.dataset.sam2_datasets.TorchTrainMixedDataset 
       phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
       batch_sizes: # List of batch sizes corresponding to each dataset
-      # - ${sa1b_dataset_train.train_batch_size} # Batch size of dataset 1
-      - ${sav_dataset_train.train_batch_size} # Batch size of dataset 2
+      - ${sa1b_dataset_train.train_batch_size} # Batch size of dataset 1
+      # - ${sav_dataset_train.train_batch_size} # Batch size of dataset 2
       datasets:
-      # # SA1B as an example of an image dataset
-      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: true
-      #   video_dataset:
-      #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-      #     img_folder: ${sa1b_dataset_train.img_folder}
-      #     gt_folder: ${sa1b_dataset_train.gt_folder}
-      #     # file_list_txt: ${path_to_train_filelist} # Optional
-      #   sampler:
-      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-      #     num_frames: 1
-      #   transforms: ${vos_train.train_transforms}
-      #   multiplier: ${sa1b_dataset_train.multiplier}
-      # SA-V as an example of a video dataset
+      # SA1B as an example of an image dataset
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: true
         video_dataset:
-          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_train.img_folder}
-          gt_folder: ${sav_dataset_train.gt_folder}
+          _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+          img_folder: ${sa1b_dataset_train.img_folder}
+          gt_folder: ${sa1b_dataset_train.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
-          # ann_every: 4
         sampler:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-          num_frames: ${scratch.train_num_frames} # Number of frames per video
-          reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
+          num_frames: 1
         transforms: ${vos_train.train_transforms}
-        multiplier: ${sav_dataset_train.multiplier}
+        multiplier: ${sa1b_dataset_train.multiplier}
+      # # SA-V as an example of a video dataset
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: true
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset_train.img_folder}
+      #     gt_folder: ${sav_dataset_train.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.train_num_frames} # Number of frames per video
+      #     reverse_time_prob: 0 # probability to reverse video
+      #   transforms: ${vos_train.train_transforms}
+      #   multiplier: ${sav_dataset_train.multiplier}
       shuffle: True
       num_workers: ${scratch.num_train_workers}
       pin_memory: True
@@ -409,21 +437,21 @@ trainer:
       - 1 # Batch size of dataset 1
       # - ${scratch.train_batch_size} # Batch size of dataset 2
       datasets:
-      # # SA1B as an example of an image dataset
-      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: False
-      #   video_dataset:
-      #     _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
-      #     img_folder: ${sa1b_dataset_val.img_folder}
-      #     gt_folder: ${sa1b_dataset_val.gt_folder}
-      #     # file_list_txt: ${path_to_train_filelist} # Optional
-      #   sampler:
-      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-      #     num_frames: 1
-      #     val: True
-      #   transforms: ${vos_val.train_transforms}
-      #   multiplier: ${sa1b_dataset_val.multiplier}
-      
+      # SA1B as an example of an image dataset
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: False
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.SA1BRawDataset_yolo
+          img_folder: ${sa1b_dataset_val.img_folder}
+          gt_folder: ${sa1b_dataset_val.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: 1
+          val: True
+        transforms: ${vos_val.train_transforms}
+        multiplier: ${sa1b_dataset_val.multiplier}
+
       # # val
       # # SA-V as an example of a video dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
@@ -442,22 +470,22 @@ trainer:
       #   transforms: ${vos_val.train_transforms}
       #   multiplier: ${sav_dataset_val.multiplier}
 
-      # test sav_dataset_test
-      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-        training: False
-        video_dataset:
-          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_test.img_folder}
-          gt_folder: ${sav_dataset_test.gt_folder}
-          # file_list_txt: ${path_to_train_filelist} # Optional
-          # ann_every: 4
-        sampler:
-          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-          num_frames: ${scratch.val_num_frames} # Number of frames per video
-          reverse_time_prob: 0 # probability to reverse video
-          val: True
-        transforms: ${vos_val.train_transforms}
-        multiplier: ${sav_dataset_test.multiplier}
+      # # test sav_dataset_test
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: False
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset_test.img_folder}
+      #     gt_folder: ${sav_dataset_test.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.val_num_frames} # Number of frames per video
+      #     reverse_time_prob: 0 # probability to reverse video
+      #     val: True
+      #   transforms: ${vos_val.train_transforms}
+      #   multiplier: ${sav_dataset_test.multiplier}
       shuffle: False
       num_workers: ${scratch.num_train_workers}
       pin_memory: True
@@ -562,7 +590,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/worlds_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

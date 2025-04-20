@@ -4,9 +4,9 @@ from ultralytics.utils.metrics import ConfusionMatrix, DetMetrics, box_iou
 from ultralytics.engine.validator import BaseValidator
 from ultralytics.utils import LOGGER, ops
 import sys
-
+# ultralytics/ultralytics/models/yolo/detect/val.py DetectionValidator
 class maP50_Validator:
-    def __init__(self, names, save_dir=None, imgsz=1024, conf=0.001, iou=0.7, max_det=300, agnostic=False, scale_boxes=False, padding=False):
+    def __init__(self, names, save_dir=None, imgsz=1024, conf=0.001, iou=0.7, max_det=300, agnostic=False, scale_boxes=False, padding=False, skip_none_gt=True):
         self.nc = len(names)
         # self.names = names
         self.conf = conf
@@ -25,6 +25,7 @@ class maP50_Validator:
         self.niou = self.iouv.numel()
         self.scale_boxes = scale_boxes
         self.padding = padding
+        self.skip_none_gt = skip_none_gt
 
     def init_metrics(self):
         """Initialize evaluation metrics for YOLO."""
@@ -79,10 +80,32 @@ class maP50_Validator:
         # ratio_pad = batch["ratio_pad"][si]
         # print("ori_shape:", ori_shape, type(ori_shape))
         # print("imgsz:", imgsz)#, imgsz.shape)
-        # print("ratio_pad:", ratio_pad)#, ratio_pad.shape)
+        # # print("ratio_pad:", ratio_pad)#, ratio_pad.shape)
+        # print("cls.numel():", cls.numel())
+        # print("cls.ndim:", cls.ndim)
+        # print("batch:", batch)
+        # print("si:", si)
+        # print("idx:", idx)
+        # print("cls:", cls)
+        # print("bbox:", bbox)
+        # nan = torch.tensor([float('nan')])
+        # print("nan:", nan)
+        # print("nan.numel():", nan.numel())
+        # print("nan.ndim:", nan.ndim)
         # sys.exit()
-        if cls.ndim <= 0:
+        if cls.ndim <= 0 and cls.numel() == 1:
+            cls = cls.unsqueeze(0)
+        if len(cls) <= 0 and self.skip_none_gt:
+        # if cls.numel() <= 0:
+            # print("cls.numel():", cls.numel())
+            # print("cls.ndim:", cls.ndim)
+            # print("batch:", batch)
             # print("si:", si)
+            # print("idx:", idx)
+            # print("cls:", cls)
+            # print("bbox:", bbox)
+            # # print("batch[ori_shape][si]:", batch["ori_shape"][si])
+            # sys.exit()
             return None
         if len(cls):
             bbox = ops.xywh2xyxy(bbox) * torch.tensor(imgsz, device=self.device)[[1, 0, 1, 0]]  # target boxes
@@ -114,9 +137,9 @@ class maP50_Validator:
             pbatch = self._prepare_batch(si, batch)
             if pbatch == None:
                 self.seen -= 1
-                print("====================================================================")
-                print("         NO         GROUNDTRUTH         IN         BATCH            ")
-                print("====================================================================")
+                # print("====================================================================")
+                # print("         NO         GROUNDTRUTH         IN         BATCH            ")
+                # print("====================================================================")
                 continue
             cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
             # print(f"GT bbox: {bbox.min().item(), bbox.max().item()}")  # Ground Truth bbox
@@ -141,6 +164,13 @@ class maP50_Validator:
             # Evaluate
             if nl:
                 stat["tp"] = self._process_batch(predn, bbox, cls)
+            # else:
+            #     print("pbatch:", pbatch)
+            #     print("cls:", cls)
+            #     print("nl:", nl)
+            #     print("bbox:", bbox)
+            #     print("stat:", stat)
+            #     sys.exit()
             # if self.args.plots:
             #     self.confusion_matrix.process_batch(predn, bbox, cls)
             for k in self.stats.keys():

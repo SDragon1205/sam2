@@ -1,7 +1,7 @@
 # @package _global_
 
 scratch:
-  mode: val #train #val # train_only
+  mode: train #train #val # train_only
   init_cond_frames_mode: 2
   skip_first_frame: True
   resolution: 640
@@ -15,20 +15,40 @@ scratch:
   phases_per_epoch: 1
   num_epochs: 150
   reverse_time_prob: 0.5
-  nc: 10
+  nc: 30
   ch: [128, 256, 512]
   stride: [ 8., 16., 32.]  # 640/80, 640/40, 640/20
   names:
-    0: "pedestrian"
-    1: "people"
-    2: "bicycle"
-    3: "car"
-    4: "van"
-    5: "truck"
-    6: "tricycle"
-    7: "awning-tricycle"
-    8: "bus"
-    9: "motor"
+    0: airplane
+    1: antelope
+    2: bear
+    3: bicycle
+    4: bird
+    5: bus
+    6: car
+    7: cattle
+    8: dog
+    9: domestic_cat
+    10: elephant
+    11: fox
+    12: giant_panda
+    13: hamster
+    14: horse
+    15: lion 
+    16: lizard 
+    17: monkey
+    18: motorcycle
+    19: rabbit
+    20: red_panda
+    21: sheep
+    22: snake
+    23: squirrel
+    24: tiger
+    25: train
+    26: turtle
+    27: watercraft
+    28: whale
+    29: zebra
 
 # dataset:
 #   # PATHS to Dataset
@@ -36,38 +56,52 @@ scratch:
 #   gt_folder: null  # PATH to MOSE Annotations folder
 #   file_list_txt: training/assets/MOSE_sample_train_list.txt # Optional PATH to filelist containing a subset of videos to be used for training
 #   multiplier: 2
-sa1b_dataset_train:
-  # PATHS to Dataset
-  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
-  multiplier: 1
-  train_batch_size: 4
+# sa1b_dataset_train:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/images/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-train/annotations/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 4
 
-sa1b_dataset_val:
+# sa1b_dataset_val:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 1
+
+# sav_dataset_train:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/sequences/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/annotations/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 1
+
+# sav_dataset_val:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val_20/sequences/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val_20/annotations/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 1
+
+# sav_dataset_test:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/sequences/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/annotations/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 1
+
+imagenetvid_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-DET-val/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ILSVRC2015_VID/ILSVRC2015/Annotations/VID/train/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ILSVRC2015_VID/ILSVRC2015/Data/VID/train/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
-sav_dataset_train:
+imagenetvid_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-train/annotations/"  # PATH to MOSE Annotations folder
-  multiplier: 1
-  train_batch_size: 1
-
-sav_dataset_val:
-  # PATHS to Dataset
-  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val_20/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-val_20/annotations/"  # PATH to MOSE Annotations folder
-  multiplier: 1
-  train_batch_size: 1
-
-sav_dataset_test:
-  # PATHS to Dataset
-  img_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/sequences/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/annotations/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ILSVRC2015_VID/ILSVRC2015/Annotations/VID/val/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ILSVRC2015_VID/ILSVRC2015/Data/VID/val/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
@@ -355,7 +389,6 @@ trainer:
     agnostic: false
     names: ${scratch.names}
     # scale_boxes: True
-    # skip_none_gt: False
 
   data:
     train:
@@ -363,7 +396,7 @@ trainer:
       phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
       batch_sizes: # List of batch sizes corresponding to each dataset
       # - ${sa1b_dataset_train.train_batch_size} # Batch size of dataset 1
-      - ${sav_dataset_train.train_batch_size} # Batch size of dataset 2
+      - ${imagenetvid_dataset_train.train_batch_size} # Batch size of dataset 2
       datasets:
       # # SA1B as an example of an image dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
@@ -382,9 +415,9 @@ trainer:
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: true
         video_dataset:
-          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_train.img_folder}
-          gt_folder: ${sav_dataset_train.gt_folder}
+          _target_: training.dataset.vos_raw_dataset.ImagenetVIDDataset_yolo
+          img_folder: ${imagenetvid_dataset_train.img_folder}
+          gt_folder: ${imagenetvid_dataset_train.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
           # ann_every: 4
         sampler:
@@ -392,7 +425,7 @@ trainer:
           num_frames: ${scratch.train_num_frames} # Number of frames per video
           reverse_time_prob: ${scratch.reverse_time_prob} # probability to reverse video
         transforms: ${vos_train.train_transforms}
-        multiplier: ${sav_dataset_train.multiplier}
+        multiplier: ${imagenetvid_dataset_train.multiplier}
       shuffle: True
       num_workers: ${scratch.num_train_workers}
       pin_memory: True
@@ -424,31 +457,14 @@ trainer:
       #   transforms: ${vos_val.train_transforms}
       #   multiplier: ${sa1b_dataset_val.multiplier}
       
-      # # val
-      # # SA-V as an example of a video dataset
-      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
-      #   training: False
-      #   video_dataset:
-      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-      #     img_folder: ${sav_dataset_val.img_folder}
-      #     gt_folder: ${sav_dataset_val.gt_folder}
-      #     # file_list_txt: ${path_to_train_filelist} # Optional
-      #     # ann_every: 4
-      #   sampler:
-      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
-      #     num_frames: ${scratch.val_num_frames} # Number of frames per video
-      #     reverse_time_prob: 0 # probability to reverse video
-      #     val: True
-      #   transforms: ${vos_val.train_transforms}
-      #   multiplier: ${sav_dataset_val.multiplier}
-
-      # test sav_dataset_test
+      # val
+      # SA-V as an example of a video dataset
       - _target_: training.dataset.vos_dataset.VOSDataset_yolo
         training: False
         video_dataset:
-          _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
-          img_folder: ${sav_dataset_test.img_folder}
-          gt_folder: ${sav_dataset_test.gt_folder}
+          _target_: training.dataset.vos_raw_dataset.ImagenetVIDDataset_yolo
+          img_folder: ${imagenetvid_dataset_val.img_folder}
+          gt_folder: ${imagenetvid_dataset_val.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
           # ann_every: 4
         sampler:
@@ -457,7 +473,24 @@ trainer:
           reverse_time_prob: 0 # probability to reverse video
           val: True
         transforms: ${vos_val.train_transforms}
-        multiplier: ${sav_dataset_test.multiplier}
+        multiplier: ${imagenetvid_dataset_val.multiplier}
+
+      # # test sav_dataset_test
+      # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+      #   training: False
+      #   video_dataset:
+      #     _target_: training.dataset.vos_raw_dataset.JSONRawDataset_yolo
+      #     img_folder: ${sav_dataset_test.img_folder}
+      #     gt_folder: ${sav_dataset_test.gt_folder}
+      #     # file_list_txt: ${path_to_train_filelist} # Optional
+      #     # ann_every: 4
+      #   sampler:
+      #     _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+      #     num_frames: ${scratch.val_num_frames} # Number of frames per video
+      #     reverse_time_prob: 0 # probability to reverse video
+      #     val: True
+      #   transforms: ${vos_val.train_transforms}
+      #   multiplier: ${sav_dataset_test.multiplier}
       shuffle: False
       num_workers: ${scratch.num_train_workers}
       pin_memory: True

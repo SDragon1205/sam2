@@ -61,6 +61,8 @@ class RandomLoadText:
         max_samples: int = 80,
         padding: bool = False,
         padding_value: List[str] = [""],
+        text_pos_shuffle: bool = False,
+        text_only_pos: bool = False,
     ) -> None:
         """
         Initializes the RandomLoadText class for randomly sampling positive and negative texts.
@@ -100,6 +102,8 @@ class RandomLoadText:
         self.max_samples = max_samples
         self.padding = padding
         self.padding_value = padding_value
+        self.text_pos_shuffle = text_pos_shuffle
+        self.text_only_pos = text_only_pos
 
     def __call__(self, labels: dict) -> dict:
         """
@@ -125,15 +129,33 @@ class RandomLoadText:
         num_classes = len(class_texts)
         cls = np.asarray(labels.pop("cls"), dtype=int)
         pos_labels = np.unique(cls).tolist()
+        # print("pos_labels before:", pos_labels)
+        if self.text_pos_shuffle:
+            random.shuffle(pos_labels)
+            # pos_labels = [pos_labels[i] for i in torch.randperm(len(pos_labels))]
+        # print("pos_labels before:", pos_labels)
 
         if len(pos_labels) > self.max_samples:
             pos_labels = random.sample(pos_labels, k=self.max_samples)
+        # print("pos_labels:", pos_labels)
 
-        neg_samples = min(min(num_classes, self.max_samples) - len(pos_labels), random.randint(*self.neg_samples))
-        neg_labels = [i for i in range(num_classes) if i not in pos_labels]
-        neg_labels = random.sample(neg_labels, k=neg_samples)
+        if self.text_only_pos and (len(pos_labels) != 0):
+            sampled_labels = pos_labels.copy()
+            needed = self.max_samples - len(sampled_labels)
+            
+            if needed > 0:
+                sampled_labels += random.choices(pos_labels, k=needed)
+            
+            random.shuffle(sampled_labels)
+            # print("sampled_labels:", sampled_labels)
+        else:
+            neg_samples = min(min(num_classes, self.max_samples) - len(pos_labels), random.randint(*self.neg_samples))
+            neg_labels = [i for i in range(num_classes) if i not in pos_labels]
+            neg_labels = random.sample(neg_labels, k=neg_samples)
+            # print("neg_labels:", neg_labels)
 
-        sampled_labels = pos_labels + neg_labels
+            sampled_labels = pos_labels + neg_labels
+        
         # Randomness
         # random.shuffle(sampled_labels)
 
@@ -156,7 +178,7 @@ class RandomLoadText:
             prompt = self.prompt_format.format(prompts[random.randrange(len(prompts))])
             texts.append(prompt)
 
-        if self.padding:
+        if self.padding and (not self.text_only_pos):
             valid_labels = len(pos_labels) + len(neg_labels)
             num_padding = self.max_samples - valid_labels
             if num_padding > 0:
@@ -694,17 +716,19 @@ class YOLOMTrain(YOLOMBase):
     
     def get_texts(self, cls, batch_idx, batch_size, consistent_transform=True):
         transform = RandomLoadText(
-                max_samples=min(10, 80),
+                max_samples=self.text_max_samples, #min(10, 80),
                 padding=True,
                 # padding_value=self._get_neg_texts(self.category_freq),
+                text_pos_shuffle=self.text_pos_shuffle,
+                text_only_pos=self.text_only_pos,
             )
         # print("cls:", cls)
         # print("batch_idx:", batch_idx)
 
-        max_batch_idx = int(batch_idx.max().item()) + 1
+        # max_batch_idx = int(batch_idx.max().item()) + 1
         txt_feats = []
 
-        for i in range(max_batch_idx):
+        for i in range(batch_size): #max_batch_idx):
             # # 擷取當前 batch 的所有 cls
             # cls_i = cls[batch_idx == i]
             # print("cls_i:", cls_i)
@@ -722,17 +746,22 @@ class YOLOMTrain(YOLOMBase):
     # 7: "awning-tricycle"
     # 8: "bus"
     # 9: "motor"
-            txt_feats.append(transform({"cls":cls[batch_idx == i], "texts": [('pedestrian',), ('people',), ('bicycle',), ('car',), ('van',), ('truck',), ('tricycle',), ('awning-tricycle',), ('bus',), ('motor',)]})["texts"])
+            # print("cls[batch_idx == i]:", cls[batch_idx == i])
+            # test_cls = torch.tensor([])
+            txt_transform = transform({"cls":cls[batch_idx == i], "texts": [('pedestrian',), ('people',), ('bicycle',), ('car',), ('van',), ('truck',), ('tricycle',), ('awning-tricycle',), ('bus',), ('motor',)]})["texts"]
+            txt_feats.append(txt_transform)
+            # print("txt_transform:", len(txt_transform), txt_transform)
             # print("txt_feats:", txt_feats)
             # print("txt_feats* batch_size:", txt_feats* batch_size)
             # sys.exit()
             if consistent_transform:
                 return txt_feats * batch_size
-            # sys.exit()
+            # print(f"{i} txt_feats:", txt_feats)
+        # sys.exit()
         return txt_feats
     
     def get_txt_feats(self, cls, batch_idx, batch_size, consistent_transform=True):
-        if self.training:
+        if self.training or (not self.text_val_all):
             batch_texts = self.get_texts(cls, batch_idx, batch_size, consistent_transform=consistent_transform)
         else:
             batch_texts = [['pedestrian', 'people', 'bicycle', 'car', 'van', 'truck', 'tricycle', 'awning-tricycle', 'bus', 'motor']] * batch_size
@@ -793,12 +822,16 @@ class YOLOMTrain(YOLOMBase):
         # print(f"batch_size:{batch_size}, hw_size0:{hw_size0}, hw_size1:{hw_size1}, hw_size2:{hw_size2}")
         # 14 = 10(nc) + 4(xywh)
         # 74 = 10(nc) + 16(reg_max) * 4 = 10 + 64
+        # 8400 = 80*80 + 40*40 + 20*20 = 6400 + 1600 + 400
+        nc_xywh = self.detect_nc + 4
+        nc_regmax = self.detect_nc + 64
+
         all_frame_outputs = (
-            torch.zeros(batch_size, 14, 8400, device=self.device),
+            torch.zeros(batch_size, nc_xywh, 8400, device=self.device),
             [
-                torch.zeros(batch_size, 74, hw_size0, hw_size0, device=self.device),
-                torch.zeros(batch_size, 74, hw_size1, hw_size1, device=self.device),
-                torch.zeros(batch_size, 74, hw_size2, hw_size2, device=self.device)
+                torch.zeros(batch_size, nc_regmax, hw_size0, hw_size0, device=self.device),
+                torch.zeros(batch_size, nc_regmax, hw_size1, hw_size1, device=self.device),
+                torch.zeros(batch_size, nc_regmax, hw_size2, hw_size2, device=self.device)
             ]
         )
         # all_frame_outputs = [
@@ -846,6 +879,19 @@ class YOLOMTrain(YOLOMBase):
                 # )
 
             # Get output masks based on this frame's prompts and previous memory
+            track_txt_feats = None
+            if self.world:
+                try:
+                    if self.image_dataset:
+                        track_txt_feats=txt_feats
+                    else:
+                        track_txt_feats=txt_feats[stage_id].unsqueeze(0)
+                except IndexError as e:
+                    print("batch_size:", batch_size)
+                    print("txt_feats.shape:", txt_feats.shape)
+                    print("stage_id:", stage_id)
+                    track_txt_feats=txt_feats[stage_id].unsqueeze(0)
+
             yolo_outputs, current_out = self.track_step(
             # yolo_outputs = self.track_step(
                 frame_idx=stage_id,
@@ -862,7 +908,7 @@ class YOLOMTrain(YOLOMBase):
                 init_cond_frames_gt=init_cond_frames_gt,
                 img_ids=img_ids,
                 current_vision_feats_occluded=current_vision_feats_occluded,
-                txt_feats=txt_feats[stage_id].unsqueeze(0),
+                txt_feats=track_txt_feats,
             )
             # Append the output, depending on whether it's a conditioning frame
             add_output_as_cond_frame = stage_id in init_cond_frames #or (
@@ -893,7 +939,7 @@ class YOLOMTrain(YOLOMBase):
                         output_dict["cond_frame_outputs"][stage_id] = current_out
                     else:
                         output_dict["non_cond_frame_outputs"][stage_id] = current_out
-            
+            # print("output_dict:", output_dict)
             # for io in range(len(output_dict["non_cond_frame_outputs"])):
             #     # print("output_dict:", output_dict)
             #     # print("io:", io)
@@ -911,8 +957,9 @@ class YOLOMTrain(YOLOMBase):
             output_idx = 0
             # print("all_frame_outputs[0].shape:", all_frame_outputs[0].shape)
             # print("yolo_outputs[0].shape:", yolo_outputs[0].shape)
-            # print("yolo_outputs[0].device:", yolo_outputs[0].device)
-            # print("all_frame_outputs[0].device:", all_frame_outputs[0].device)
+            # print("yolo_outputs[1].shape:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
+            # # print("yolo_outputs[0].device:", yolo_outputs[0].device)
+            # # print("all_frame_outputs[0].device:", all_frame_outputs[0].device)
             # print("img_ids:", img_ids)
             for i_img_ids in img_ids:
                 all_frame_outputs[0][i_img_ids] = yolo_outputs[0][output_idx]

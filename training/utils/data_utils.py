@@ -287,6 +287,7 @@ class BatchedVideoDatapoint_yolo:
 def collate_fn_yolo(
     batch: List[VideoDatapoint_yolo],
     dict_key,
+    is_visdrone_dataset: bool = True,
 ) -> BatchedVideoDatapoint_yolo:
     """
     Args:
@@ -341,7 +342,10 @@ def collate_fn_yolo(
                 #     torch.tensor([orig_video_id, orig_obj_id, orig_frame_idx])
                 # )
                 batch_idx.append(video_idx * T + t)
-                step_t_classes.append(frame.classes[idx]-1)
+                if is_visdrone_dataset:
+                    step_t_classes.append(frame.classes[idx]-1)
+                else:
+                    step_t_classes.append(frame.classes[idx])
                 step_t_bbox.append(torch.tensor(frame.bboxes[idx], dtype=torch.float32))
                 step_t_ori_shape.append([orig_frame_size[0], orig_frame_size[1]])
                 # step_t_score.append(torch.tensor(frame.scores[idx], dtype=torch.float32))
@@ -351,7 +355,18 @@ def collate_fn_yolo(
     # obj_to_frame_idx = torch.stack(step_t_obj_to_frame_idx, dim=0)  # Shape: [x, 2]
     batch_idx = torch.tensor(batch_idx, dtype=torch.float32)
     classes_stack = torch.tensor(step_t_classes, dtype=torch.float32)  # Shape: [x]
-    bbox_stack = torch.stack(step_t_bbox, dim=0)  # Shape: [x, 4]
+    bbox_stack = torch.stack(step_t_bbox, dim=0)
+    # try:
+    #     bbox_stack = torch.stack(step_t_bbox, dim=0)  # Shape: [x, 4]
+    #     # print("bbox_stack.shape:", bbox_stack.shape)
+    # except RuntimeError as e:
+    #     # print("batch_idx:", batch_idx.shape, batch_idx)
+    #     # print("classes_stack:", classes_stack.shape, classes_stack)
+    #     # print("step_t_bbox:", step_t_bbox)
+    #     # raise e
+    #     bbox_stack = torch.empty((0, 4), dtype=torch.float32)
+    #     # bbox_stack = torch.tensor([], dtype=torch.float32)
+    
     # score_stack = torch.stack(step_t_score, dim=0)  # Shape: [x]
 
     # masks = torch.stack([torch.stack(masks, dim=0) for masks in step_t_masks], dim=0)

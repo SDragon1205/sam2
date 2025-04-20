@@ -140,6 +140,8 @@ class yolo(nn.Module):
         # # print("self.detection_model.model[-1].export:", self.detection_model.model[-1].export)
         # sys.exit()
         if len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export:
+            print("len(txt_feats):", len(txt_feats))
+            print("len(x_list[0]):", len(x_list[0]))
             raise ValueError('len(txt_feats) != len(x_list[0]) or self.detection_model.model[-1].export: use clone to input txt_feats on forward_neck_head_world function, 因為其他frame的txt_feats和ori_txt_feats會被影響')
             txt_feats = txt_feats.expand(x_list[0].shape[0], -1, -1)
         ori_txt_feats = txt_feats.clone()
