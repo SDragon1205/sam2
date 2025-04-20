@@ -355,17 +355,17 @@ def collate_fn_yolo(
     # obj_to_frame_idx = torch.stack(step_t_obj_to_frame_idx, dim=0)  # Shape: [x, 2]
     batch_idx = torch.tensor(batch_idx, dtype=torch.float32)
     classes_stack = torch.tensor(step_t_classes, dtype=torch.float32)  # Shape: [x]
-    bbox_stack = torch.stack(step_t_bbox, dim=0)
-    # try:
-    #     bbox_stack = torch.stack(step_t_bbox, dim=0)  # Shape: [x, 4]
-    #     # print("bbox_stack.shape:", bbox_stack.shape)
-    # except RuntimeError as e:
-    #     # print("batch_idx:", batch_idx.shape, batch_idx)
-    #     # print("classes_stack:", classes_stack.shape, classes_stack)
-    #     # print("step_t_bbox:", step_t_bbox)
-    #     # raise e
-    #     bbox_stack = torch.empty((0, 4), dtype=torch.float32)
-    #     # bbox_stack = torch.tensor([], dtype=torch.float32)
+    # bbox_stack = torch.stack(step_t_bbox, dim=0)
+    try:
+        bbox_stack = torch.stack(step_t_bbox, dim=0)  # Shape: [x, 4]
+        # print("bbox_stack.shape:", bbox_stack.shape)
+    except RuntimeError as e:
+        # print("batch_idx:", batch_idx.shape, batch_idx)
+        # print("classes_stack:", classes_stack.shape, classes_stack)
+        # print("step_t_bbox:", step_t_bbox)
+        # raise e
+        bbox_stack = torch.empty((0, 4), dtype=torch.float32)
+        # bbox_stack = torch.tensor([], dtype=torch.float32)
     
     # score_stack = torch.stack(step_t_score, dim=0)  # Shape: [x]
 
