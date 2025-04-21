@@ -825,6 +825,7 @@ class Trainer_yolo:
         for data_iter, batch in enumerate(val_loader):
             # self.validator.init_metrics()
             # visualize_batched_video(batch)
+            # sys.exit()
             # measure data loading time
             data_time.update(time.time() - end)
 
