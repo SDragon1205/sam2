@@ -108,7 +108,7 @@ def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float
         draw.text(text_position, label, fill="yellow", font=font)
 
     return img_pil
-def visualize_batched_video(batched_video):
+def visualize_batched_video(batched_video, folder="tmp"):
     """
     Process all videos and frames in the BatchedVideoDatapoint_yolo object.
     """
@@ -148,7 +148,7 @@ def visualize_batched_video(batched_video):
             )
 
             # Save frame to current directory
-            output_path = f"tmp/frame_{b}_{t}.png"
+            output_path = f"{folder}/frame_{b}_{t}.png"
             frame_with_bboxes.save(output_path)
 
             # Store result

@@ -27,6 +27,9 @@ from torchviz import make_dot
 from typing import List, Tuple
 import random
 import itertools
+from training.dataset.transforms import gaussian_blur_batch
+from training.trainer_yolo import visualize_batched_video
+
 # from ultralytics.data.augment import RandomLoadText
 class RandomLoadText:
     """
@@ -308,7 +311,28 @@ class YOLOMTrain(YOLOMBase):
         if self.current_frame_occluded_all:
             occluded_feats = self.forward_image(torch.ones_like(input.flat_img_batch))
         # print("occluded_feats:", occluded_feats)
+        # flat_img_batch_clone = input.flat_img_batch.clone()
         backbone_out = self.forward_image(input.flat_img_batch)
+        # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][0][0][0])
+        # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0].shape)
+        # print("torch.equal(flat_img_batch_clone, input.flat_img_batch):", torch.equal(flat_img_batch_clone, input.flat_img_batch))
+        if self.current_frame_transform:
+            # print("input.flat_img_batch:", input.flat_img_batch.shape)
+            # print("input.img_batch:", input.img_batch.shape)
+            # input_blurred = input.copy()
+            # input_blurred.img_batch = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0).reshape(input.img_batch.shape)
+            # print("input_blurred.img_batch:", input_blurred.img_batch.shape)
+            # visualize_batched_video(input)
+            # visualize_batched_video(input_blurred, folder="tmp_trans")
+            # sys.exit()
+            img_batch_blurred = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0)
+            occluded_feats = self.forward_image(img_batch_blurred)
+            # print("occluded_feats:", occluded_feats["backbone_fpn"][0][0][0][0])
+            # print("occluded_feats:", occluded_feats["backbone_fpn"][0].shape)
+            # print("backbone_out_trans[vision_pos_enc][0]:", backbone_out_trans["vision_pos_enc"][0].shape)
+            # print("backbone_out_trans[vision_pos_enc] == backbone_out[vision_pos_enc]", torch.equal(backbone_out_trans["vision_pos_enc"][0],backbone_out["vision_pos_enc"][0]))
+            # backbone_out["backbone_fpn_trans"] = backbone_out_trans["backbone_fpn"]
+
         backbone_out = self.prepare_prompt_inputs(backbone_out, input)
         previous_stages_out = self.forward_tracking(backbone_out, input, occluded_feats=occluded_feats)
         # previous_stages_out = self._forward_yolo_neck_heads(backbone_out["backbone_fpn"])
@@ -843,6 +867,8 @@ class YOLOMTrain(YOLOMBase):
         for stage_id in processing_order:
             # print("==================================================================")
             # print("stage_id:", stage_id)
+            # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][stage_id][0][0][0])
+            # print("occluded_feats:", occluded_feats["backbone_fpn"][0][stage_id][0][0][0])
             # print("txt_feats[stage_id].unsqueeze(0):", txt_feats[stage_id].unsqueeze(0).shape)
             # Get the image features for the current frames
             # img_ids = input.find_inputs[stage_id].img_ids
@@ -862,7 +888,7 @@ class YOLOMTrain(YOLOMBase):
                 # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
                 current_vision_feats_occluded = None
-                if self.current_frame_occluded_all:
+                if self.current_frame_occluded_all or self.current_frame_transform:
                     current_vision_feats_occluded = [x[:, img_ids] for x in vision_feats_occluded]
                     # print("current_vision_feats_occluded:", current_vision_feats_occluded[0].shape, current_vision_feats_occluded[0][0][0][0])
             else:
@@ -1061,7 +1087,7 @@ class YOLOMTrain(YOLOMBase):
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
-        if self.current_frame_occluded_all:
+        if self.current_frame_occluded_all or self.current_frame_transform:
             yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
                 frame_idx,
                 is_init_cond_frame,

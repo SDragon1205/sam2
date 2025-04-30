@@ -17,6 +17,7 @@ import cv2
 import torch
 import torchvision.transforms as T
 import torchvision.transforms.functional as F
+import torch.nn.functional as NF
 import torchvision.transforms.v2.functional as Fv2
 from PIL import Image as PILImage
 from torchvision.transforms import InterpolationMode
@@ -1045,3 +1046,20 @@ class RandomAffine_yolo:
 #             ))
 
 #         return new_bboxes
+
+def get_gaussian_kernel(kernel_size=5, sigma=1.0, channels=3):
+    # 產生 1D Gaussian kernel
+    x = torch.arange(kernel_size) - kernel_size // 2
+    gauss = torch.exp(-x**2 / (2 * sigma**2))
+    gauss /= gauss.sum()
+    # 擴展為 2D kernel
+    kernel2d = torch.outer(gauss, gauss)
+    kernel2d = kernel2d.expand(channels, 1, kernel_size, kernel_size)
+    return kernel2d
+
+def gaussian_blur_batch(images, kernel_size=5, sigma=1.0):
+    b, c, h, w = images.shape
+    kernel = get_gaussian_kernel(kernel_size, sigma, c).to(images.device)
+    padding = kernel_size // 2
+    blurred = NF.conv2d(images, kernel, padding=padding, groups=c)
+    return blurred

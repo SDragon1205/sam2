@@ -141,6 +141,7 @@ class YOLOMBase(torch.nn.Module):
         text_max_samples: int = -1,
         text_val_all: bool = True,
         text_only_pos: bool = False,
+        current_frame_transform: bool = False,
     ):
         super().__init__()
 
@@ -277,6 +278,8 @@ class YOLOMBase(torch.nn.Module):
         self.cut_gradient_before_encoder = cut_gradient_before_encoder
         self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
         self.prev_frame_idx_minus = prev_frame_idx_minus
+        self.current_frame_transform = current_frame_transform
+
         self.text_consistent = text_consistent
         self.text_pos_shuffle = text_pos_shuffle
         self.image_dataset = image_dataset
@@ -707,7 +710,7 @@ class YOLOMBase(torch.nn.Module):
         vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
 
         vision_feats_occluded = None
-        if self.current_frame_occluded_all:
+        if self.current_frame_occluded_all or self.current_frame_transform:
             feature_maps_occluded = occluded_feats["backbone_fpn"][-self.num_feature_levels :]
             # vision_pos_embeds_occluded = occluded_feats["vision_pos_enc"][-self.num_feature_levels :]
             vision_feats_occluded = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_occluded]
