@@ -594,6 +594,8 @@ class YOLOMBase(torch.nn.Module):
         # print("self.yolo.detection_model.model[22].nc:", self.yolo.detection_model.model[22].nc)
         # print("self.yolo.detection_model.model[22].reg_max:", self.yolo.detection_model.model[22].reg_max)
         # sys.exit()
+        # print("self.training:", self.training)
+        # sys.exit()
         if not self.training:
             return x_preds
         

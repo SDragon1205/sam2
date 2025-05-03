@@ -710,7 +710,7 @@ class Trainer_yolo:
         if self.mode in ["train", "train_only", "train2"]:
             self.train_dataset = instantiate(self.data_conf.train)
         
-        if self.mode in ["train2"]:
+        if self.mode in ["train2", "test"]:
             self.test_dataset = instantiate(self.data_conf.get(Phase.TEST, None))
             # print(self.test_dataset)
             # sys.exit()
@@ -918,7 +918,7 @@ class Trainer_yolo:
         # "Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})"
 
         seen, nt_per_class, result0, result1, result2, result3 = self.validator.print_results()
-        if self.mode == "train" or "train2":
+        if self.mode == "train" or self.mode == "train2":
             self.logger.log(f"Metrics/val_Images", seen, self.epoch)
             self.logger.log(f"Metrics/val_Instances", nt_per_class, self.epoch)
             self.logger.log(f"Metrics/val_Precision", result0, self.epoch)
@@ -1556,7 +1556,7 @@ class Trainer_yolo:
         self.loss["val"].loss.device = self.device
         self.loss["val"].loss.bbox_loss = self.loss["val"].loss.bbox_loss.to(self.device)
         self.loss["val"].loss.proj = self.loss["val"].loss.proj.to(self.device)
-        if self.mode == "train2":
+        if self.mode == "train2" or self.mode == "test":
             self.loss["test"].loss.device = self.device
             self.loss["test"].loss.bbox_loss = self.loss["test"].loss.bbox_loss.to(self.device)
             self.loss["test"].loss.proj = self.loss["test"].loss.proj.to(self.device)

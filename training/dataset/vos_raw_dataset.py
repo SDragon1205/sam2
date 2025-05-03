@@ -804,15 +804,19 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
         )
         # print("self.image_names:", self.image_names)
 
-    def get_video(self, image_idx):
+    def get_video(self, image_idx, error=False):
         image_name = self.image_names[image_idx]
         image_path = os.path.join(self.img_folder, f"{image_name}.JPEG")
         gt_path = os.path.join(self.gt_folder, f"{image_name}.xml")
-
+        if error:
+            print("image_path:", image_path)
+            print("gt_path:", gt_path)
         # 取得某張圖來抓圖片大小（所有 frame 同尺寸）
         sample_image = cv2.imread(image_path)
         img_h, img_w = sample_image.shape[:2]
-
+        # if error:
+        #     print("sample_image:", sample_image)
+        #     print("img_h, img_w:", img_h, img_w)
         # 找對應的 XML 標註檔
         xml_file = gt_path
         classes, bboxes, occlusions = [], [], []
@@ -822,6 +826,9 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
             root = tree.getroot()
 
             objects = root.findall("object")
+            # if error:
+            #     print("tree:", tree)
+            #     print("objects:", objects)
             # if len(objects) == 0:
             #     raise ValueError(f"[ERROR] No <object> found in annotation: {xml_file}")
 
@@ -841,11 +848,21 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
                 height = (ymax - ymin) / img_h
 
                 occluded_tag = obj.find("occluded")
-                occlusion = int(occluded_tag.text)
+                if error:
+                    print("occluded_tag:", occluded_tag)
+                occlusion = int(occluded_tag.text) if occluded_tag is not None else 0 #int(occluded_tag.text)
 
                 bboxes.append((x_center, y_center, width, height))
                 classes.append(cls)
                 occlusions.append(occlusion)
+                if error:
+                    print("cls:", cls)
+                    print("xmin:", xmin)
+                    print("ymin:", ymin)
+                    print("xmax:", xmax)
+                    print("ymax:", ymax)
+        else:
+            raise ValueError(f"xml_file not exist: {xml_file}")
 
         frame = VOSFrame_yolo(
             frame_idx=0,
@@ -856,6 +873,8 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
             truncation=[0] * len(bboxes),        # 無 truncation 時統一為 0
             occlusion=occlusions          # 無 occlusion 可用時預設為 0
         )
+        if error:
+            print("frame:", frame)
 
         # 組裝成單幀影片 (實際上是單張影像)
         video = VOSVideo_yolo(
@@ -864,7 +883,8 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
             frames=[frame],  # 視為只有一個 frame
             size=(img_h, img_w)
         )
-
+        if error:
+            print("video:", video)
         return video
 
     def __len__(self):

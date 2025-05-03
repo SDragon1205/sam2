@@ -3,7 +3,7 @@
 scratch:
   mode: val #val #train # train_only
   temp_pos_enc: True
-  init_cond_frames_mode: 1
+  init_cond_frames_mode: 2
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
   memory_position: 0

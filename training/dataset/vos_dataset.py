@@ -172,6 +172,8 @@ class VOSDataset_yolo(VisionDataset):
         multiplier: int,
         always_target=True,
         target_segments_available=True,
+        # mixup_prob=0.0,
+        # mosaic_prob=0.0,
     ):
         self._transforms = transforms
         self.training = training
@@ -185,6 +187,8 @@ class VOSDataset_yolo(VisionDataset):
         self.curr_epoch = 0  # Used in case data loader behavior changes across epochs
         self.always_target = always_target
         self.target_segments_available = target_segments_available
+        # self.mixup_prob = mixup_prob
+        # self.mosaic_prob = mosaic_prob
 
     def _get_datapoint(self, idx):
 
@@ -204,7 +208,9 @@ class VOSDataset_yolo(VisionDataset):
                     logging.warning(
                         f"Loading failed (id={idx}); Retry {retry} with exception: {e}"
                     )
-                    idx = random.randrange(0, len(self.video_dataset))
+                    # video = self.video_dataset.get_video(idx, error=True)
+                    # idx = random.randrange(0, len(self.video_dataset))
+                    raise e
                 else:
                     # Shouldn't fail to load a val video
                     raise e
