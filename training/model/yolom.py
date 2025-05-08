@@ -316,16 +316,16 @@ class YOLOMTrain(YOLOMBase):
         # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][0][0][0])
         # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0].shape)
         # print("torch.equal(flat_img_batch_clone, input.flat_img_batch):", torch.equal(flat_img_batch_clone, input.flat_img_batch))
-        if self.current_frame_transform:
-            # print("input.flat_img_batch:", input.flat_img_batch.shape)
-            # print("input.img_batch:", input.img_batch.shape)
-            input_blurred = input.copy()
-            input_blurred.img_batch = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0).reshape(input.img_batch.shape)
-            print("input_blurred.img_batch:", input_blurred.img_batch.shape)
-            visualize_batched_video(input)
-            visualize_batched_video(input_blurred, folder="tmp_trans")
-            sys.exit()
-            img_batch_blurred = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0)
+        if self.current_frame_transform or self.frame_transform_rate != 0:
+            # # print("input.flat_img_batch:", input.flat_img_batch.shape)
+            # # print("input.img_batch:", input.img_batch.shape)
+            # input_blurred = input.copy()
+            # input_blurred.img_batch = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate).reshape(input.img_batch.shape)
+            # print("input_blurred.img_batch:", input_blurred.img_batch.shape)
+            # visualize_batched_video(input)
+            # visualize_batched_video(input_blurred, folder="tmp_trans")
+            # sys.exit()
+            img_batch_blurred = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate)
             occluded_feats = self.forward_image(img_batch_blurred)
             # print("occluded_feats:", occluded_feats["backbone_fpn"][0][0][0][0])
             # print("occluded_feats:", occluded_feats["backbone_fpn"][0].shape)
@@ -888,7 +888,7 @@ class YOLOMTrain(YOLOMBase):
                 # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
                 current_vision_feats_occluded = None
-                if self.current_frame_occluded_all or self.current_frame_transform:
+                if self.current_frame_occluded_all or self.current_frame_transform or self.frame_transform_rate != 0:
                     current_vision_feats_occluded = [x[:, img_ids] for x in vision_feats_occluded]
                     # print("current_vision_feats_occluded:", current_vision_feats_occluded[0].shape, current_vision_feats_occluded[0][0][0][0])
             else:
@@ -1063,7 +1063,8 @@ class YOLOMTrain(YOLOMBase):
         current_vision_feats_occluded=None,
         txt_feats=None,
     ):
-        if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first:
+        # print("current_vision_feats before self._track_step:", current_vision_feats.shape)
+        if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first or self.memory_gating_ca:
             current_out = self._encode_memory_in_output(
                 current_vision_feats,
                 feat_sizes,
@@ -1083,11 +1084,28 @@ class YOLOMTrain(YOLOMBase):
                 output_dict["non_cond_frame_outputs"][-1] = current_out
             elif self.encode_frame_first:
                 output_dict["non_cond_frame_outputs"][frame_idx-1] = current_out
+
                 # print(f"output_dict[non_cond_frame_outputs][{frame_idx-1}]:", output_dict["non_cond_frame_outputs"][frame_idx-1]['maskmem_features'][0][0][0][0])
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
-        if self.current_frame_occluded_all or self.current_frame_transform:
+        if self.memory_gating_ca:
+            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+                frame_idx,
+                is_init_cond_frame,
+                current_vision_feats,
+                current_vision_pos_embeds,
+                feat_sizes,
+                # point_inputs,
+                # mask_inputs,
+                output_dict,
+                num_frames,
+                track_in_reverse,
+                prev_sam_mask_logits,
+                txt_feats,
+                current_out,
+            )
+        elif self.current_frame_occluded_all or self.current_frame_transform or self.frame_transform_rate != 0:
             yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
                 frame_idx,
                 is_init_cond_frame,
@@ -1117,6 +1135,8 @@ class YOLOMTrain(YOLOMBase):
                 prev_sam_mask_logits,
                 txt_feats,
             )
+        # print("current_vision_feats after self._track_step:", current_vision_feats.shape)
+        # sys.exit()
         # print("after _track_step pix_feat:", pix_feat.shape, pix_feat)
         # (
         #     low_res_multimasks,
@@ -1183,24 +1203,27 @@ class YOLOMTrain(YOLOMBase):
             )
 
         # 呼叫函數
-        if self.init_cond_frames_mode != 2 and (not self.encode_frame_first) and (not self.two_sa):
-            # print("self._encode_memory_in_output")
-            current_out = self._encode_memory_in_output(
-                current_vision_feats,
-                feat_sizes,
-                # point_inputs,
-                run_mem_encoder,
-                # high_res_masks,
-                # object_score_logits,
-                # current_out,
-                yolo_outputs_clone,
-                img_ids,
-                init_cond_frames_gt,
-                pix_feat,
-                current_bank,
-            )
-        else:
-            current_out = None
+        if not self.memory_gating_ca:
+            if self.init_cond_frames_mode != 2 and (not self.encode_frame_first) and (not self.two_sa):
+                # print("self._encode_memory_in_output")
+                current_out = self._encode_memory_in_output(
+                    current_vision_feats,
+                    feat_sizes,
+                    # point_inputs,
+                    run_mem_encoder,
+                    # high_res_masks,
+                    # object_score_logits,
+                    # current_out,
+                    yolo_outputs_clone,
+                    img_ids,
+                    init_cond_frames_gt,
+                    pix_feat,
+                    current_bank,
+                )
+            else:
+                current_out = None
+        # else:
+        #     print("self.memory_gating_ca", self.memory_gating_ca)
 
         # # 比較 yolo_outputs[0]
         # if not torch.equal(yolo_outputs_clone[0], yolo_outputs[0]):

@@ -128,6 +128,8 @@ state_dict_copy = state_dict.copy()
 # )
 # # for k, v in memory_attention.state_dict().items():  # 第一層
 # #     print(k)
+
+memory_attention_gate = nn.Linear(2 * 128, 128)
 # # # 使用兩層迴圈插入 yolo_detection_head 的參數
 # # transformer_dim=128
 # # activation = nn.GELU
@@ -147,7 +149,7 @@ state_dict_copy = state_dict.copy()
 # # # sys.exit()
 
 # Temporal encoding of the memories
-num_maskmem = 2
+num_maskmem = 3
 mem_dim = 128
 maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
@@ -174,6 +176,8 @@ for k, v in state_dict_copy.items():  # 第一層
                 # for param_name, param_value in output_upscaling.state_dict().items():
                 #     v[f"yolo.output_upscaling.{param_name}"] = param_value
                 v["maskmem_tpos_enc"] = maskmem_tpos_enc
+                for param_name, param_value in memory_attention_gate.state_dict().items():
+                    v[f"memory_attention.layers.0.gate.{param_name}"] = param_value
                 break  # 插入後結束第二層迴圈
         break  # 插入後結束第一層迴圈
 for k, v in state_dict_copy.items():  # 第一層
@@ -190,7 +194,8 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_39_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
-output_path = "yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+# output_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_recursive_residual.pt"
+output_path = "yolov8s_m_num_maskmem_3_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_memory_gate.pt"
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
 

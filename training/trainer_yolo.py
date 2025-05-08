@@ -934,7 +934,8 @@ class Trainer_yolo:
                 if self.epoch < 70:
                     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
                 elif self.epoch < 90:
-                    self.save_checkpoint(self.epoch + 1)
+                    if self.mode == "train":
+                        self.save_checkpoint(self.epoch + 1)
                     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
         # elif self.mode == "train2":
         #     self.logger.log(f"Metrics/val_Images", seen, self.epoch)
@@ -1124,6 +1125,8 @@ class Trainer_yolo:
             # if self.epoch == 70 or self.epoch == 90:
             #     self.test_best_map50 = 0
             if result2 > self.test_best_map50:
+                if self.mode == "train2":
+                    self.save_checkpoint(self.epoch + 1)
                 self.save_checkpoint(self.epoch + 1, ["test_best"])
                 # self.save_checkpoint(self.epoch + 1)
                 self.test_best_map50 = result2

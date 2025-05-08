@@ -13,6 +13,7 @@ from sam2.modeling.sam.transformer import RoPEAttention
 
 from sam2.modeling.sam2_utils import get_activation_fn, get_clones
 import sys
+import math
 
 class MemoryAttentionLayer(nn.Module):
 
@@ -29,6 +30,9 @@ class MemoryAttentionLayer(nn.Module):
         self_attention: nn.Module,
         only_sa: bool = False,
         two_sa: bool = False,
+        # gate: bool = False,
+        ca_gate: bool = False,
+        recursive_residual: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -59,6 +63,15 @@ class MemoryAttentionLayer(nn.Module):
 
         self.only_sa = only_sa
         self.two_sa = two_sa
+        if ca_gate or recursive_residual:
+            self.gate = nn.Linear(2 * d_model, d_model)
+        self.ca_gate = ca_gate
+        self.recursive_residual = recursive_residual
+
+        if self.pos_enc_at_cross_attn_keys and (self.ca_gate or self.recursive_residual):
+                # x_preds = self.yolo.forward_16_head_world(backbone_features)
+                raise ValueError(f'key pos enc add twice!! self.pos_enc_at_cross_attn_keys: {self.pos_enc_at_cross_attn_keys}, self.ca_gate: {self.ca_gate}, self.recursive_residual: {self.recursive_residual}')
+
 
     def _forward_sa(self, tgt, query_pos):
         # print("sa")
@@ -100,6 +113,42 @@ class MemoryAttentionLayer(nn.Module):
         # sys.exit()
         tgt = tgt + self.dropout2(tgt2)
         return tgt
+    
+    def memory_gating_ca(
+        self, curr_mem, memory
+    ) -> torch.Tensor:    
+        B, total_len, C = memory.shape
+        # print("memory:", memory.shape)
+        H_W = curr_mem.shape[2] * curr_mem.shape[3]
+        # print("curr_mem:", curr_mem.shape)
+        M = total_len // H_W
+        curr_mem = curr_mem.view(B, H_W, C)
+        # print("curr_mem2:", curr_mem.shape)
+        # H,W = math.sqrt(H_W)
+
+        memory = memory.view(B, M, H_W, C)                 # [B, M, H*W, C]
+        curr = curr_mem.unsqueeze(1).expand(-1, M, -1, -1)  # [B, M, H*W, C]
+        # print("curr_mem3:", curr_mem.shape)
+
+        x = torch.cat([curr, memory], dim=-1)   # [B, M, H*W, 2C]
+        # print("x:", x.shape)
+        g = torch.sigmoid(self.gate(x))        # [B, M, H*W, C]
+        # print("g:", g.shape)
+        M_t = g * memory
+        # print("M_t:", M_t.shape)
+        memory_out = M_t.view(B, M * H_W, C)
+        return memory_out
+    
+    def memory_gating_recursive_residual(
+        self, curr_mem, memory
+    ) -> torch.Tensor:    
+        x = torch.cat([curr_mem, memory], dim=-1)   # [B, H*W, 2C]
+        # print("x:", x.shape)
+        g = torch.sigmoid(self.gate(x))        # [B, H*W, C]
+        # print("g:", g.shape, g)
+        M_t = g * curr_mem + (1 - g) * memory       # residual fusion
+        # print("M_t:", M_t.shape)
+        return M_t
 
     def forward(
         self,
@@ -108,6 +157,7 @@ class MemoryAttentionLayer(nn.Module):
         pos: Optional[Tensor] = None,
         query_pos: Optional[Tensor] = None,
         num_k_exclude_rope: int = 0,
+        curr_mem = None,
     ) -> torch.Tensor:
 
         # Self-Attn, Cross-Attn
@@ -117,11 +167,27 @@ class MemoryAttentionLayer(nn.Module):
         # print("memory:", memory.shape)
         # print("pos:", pos.shape)
         # print("query_pos:", query_pos.shape)
+        # sys.exit()
         # print("num_k_exclude_rope:", num_k_exclude_rope)
+
         tgt = self._forward_sa(tgt, query_pos)
+        # tgt_before_ca = tgt.clone()
         if not self.only_sa:
-            tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
+            if self.ca_gate:
+                gate_memory = self.memory_gating_ca(curr_mem, memory+pos)
+                tgt = self._forward_ca(tgt, gate_memory, query_pos, pos, num_k_exclude_rope)
+            elif self.recursive_residual:
+                # tgt_clone = tgt.clone()
+                # memory_clone = memory.clone()
+                gate_memory = self.memory_gating_recursive_residual(tgt, memory+pos)
+                # print("tgt_clone:", torch.equal(tgt, tgt_clone))
+                # print("memory_clone:", torch.equal(memory, memory_clone))
+                tgt = self._forward_ca(tgt, gate_memory, query_pos, pos, num_k_exclude_rope)
+                # sys.exit()
+            else:
+                tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
             # print("dont need ca")
+
         # MLP
         tgt2 = self.norm3(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
@@ -157,6 +223,7 @@ class MemoryAttention(nn.Module):
         curr_pos: Optional[Tensor] = None,  # pos_enc for self-attention inputs
         memory_pos: Optional[Tensor] = None,  # pos_enc for cross-attention inputs
         num_obj_ptr_tokens: int = 0,  # number of object pointer *tokens*
+        curr_mem = None,
     ):
         if isinstance(curr, list):
             assert isinstance(curr_pos, list)
@@ -193,6 +260,7 @@ class MemoryAttention(nn.Module):
                 memory=memory,
                 pos=memory_pos,
                 query_pos=curr_pos,
+                curr_mem=curr_mem,
                 **kwds,
             )
         normed_output = self.norm(output)

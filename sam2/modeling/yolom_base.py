@@ -142,6 +142,8 @@ class YOLOMBase(torch.nn.Module):
         text_val_all: bool = True,
         text_only_pos: bool = False,
         current_frame_transform: bool = False,
+        frame_transform_rate: int = 0,
+        memory_gating_ca: bool = False,
     ):
         super().__init__()
 
@@ -279,6 +281,11 @@ class YOLOMBase(torch.nn.Module):
         self.cut_prev2_gradient_before_attention = cut_prev2_gradient_before_attention
         self.prev_frame_idx_minus = prev_frame_idx_minus
         self.current_frame_transform = current_frame_transform
+        self.frame_transform_rate = frame_transform_rate
+
+        if self.current_frame_transform and self.frame_transform_rate != 0:
+                # x_preds = self.yolo.forward_16_head_world(backbone_features)
+                raise ValueError(f'self.current_frame_transform: {self.current_frame_transform}, self.frame_transform_rate: {self.frame_transform_rate}')
 
         self.text_consistent = text_consistent
         self.text_pos_shuffle = text_pos_shuffle
@@ -289,6 +296,7 @@ class YOLOMBase(torch.nn.Module):
             self.text_max_samples = text_max_samples
         self.text_val_all = text_val_all
         self.text_only_pos = text_only_pos
+        self.memory_gating_ca = memory_gating_ca
 
         self.world = world 
         if self.world:
@@ -712,7 +720,7 @@ class YOLOMBase(torch.nn.Module):
         vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
 
         vision_feats_occluded = None
-        if self.current_frame_occluded_all or self.current_frame_transform:
+        if self.current_frame_occluded_all or self.current_frame_transform or self.frame_transform_rate != 0:
             feature_maps_occluded = occluded_feats["backbone_fpn"][-self.num_feature_levels :]
             # vision_pos_embeds_occluded = occluded_feats["vision_pos_enc"][-self.num_feature_levels :]
             vision_feats_occluded = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_occluded]
@@ -735,6 +743,7 @@ class YOLOMBase(torch.nn.Module):
         output_dict,
         num_frames,
         track_in_reverse=False,  # tracking in reverse time order (for demo usage)
+        current_out=None,
     ):
         # print("============================================================================")
         # print("_prepare_memory_conditioned_features")
@@ -1051,16 +1060,24 @@ class YOLOMBase(torch.nn.Module):
         # print("memory:", memory.shape)
         # print("memory_pos_embed:", memory_pos_embed.shape)
         # print("num_obj_ptr_tokens:", num_obj_ptr_tokens)
+        # print("current_out:", current_out)
+        # print("current_vision_feats:", len(current_vision_feats), current_vision_feats[0].shape)
+        # print("current_out['maskmem_features']:", current_out['maskmem_features'].shape)
+        # print("current_out['maskmem_pos_enc']:", len(current_out['maskmem_pos_enc']), current_out['maskmem_pos_enc'][0].shape)
+        # sys.exit()
+        # current_out_maskmem_features = current_out['maskmem_features'].clone()
         pix_feat_with_mem = self.memory_attention(
             curr=current_vision_feats,
             curr_pos=current_vision_pos_embeds,
             memory=memory,
             memory_pos=memory_pos_embed,
             num_obj_ptr_tokens=num_obj_ptr_tokens,
+            curr_mem=current_out['maskmem_features']+current_out['maskmem_pos_enc'][0],
         )
+        # print("current_out_maskmem_features:", torch.equal(current_out_maskmem_features, current_out['maskmem_features']))
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
-        # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
+        # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem[0][0][0][0])
         # sys.exit()
         return pix_feat_with_mem, current_bank
 
@@ -1145,6 +1162,7 @@ class YOLOMBase(torch.nn.Module):
             # print("current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W):", current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W))
         #     print("mask_for_mem:", mask_for_mem)
         # sys.exit()
+        # print("memory_encoder pix_feat:", pix_feat[0][0][0][0])
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
@@ -1179,6 +1197,7 @@ class YOLOMBase(torch.nn.Module):
         track_in_reverse,
         prev_sam_mask_logits,
         txt_feats,
+        current_out=None,
     ):
         # print("_track_step current_vision_feats:", current_vision_feats[0][0][0][0])
         # current_out = {"point_inputs": point_inputs, "mask_inputs": mask_inputs}
@@ -1281,6 +1300,7 @@ class YOLOMBase(torch.nn.Module):
             output_dict=output_dict,
             num_frames=num_frames,
             track_in_reverse=track_in_reverse,
+            current_out=current_out,
         )
         # print("_prepare_memory_conditioned_features pix_feat:", pix_feat.shape, pix_feat)
         # pix_feat_clone = pix_feat.clone()

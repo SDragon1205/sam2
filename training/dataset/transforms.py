@@ -1057,9 +1057,22 @@ def get_gaussian_kernel(kernel_size=5, sigma=1.0, channels=3):
     kernel2d = kernel2d.expand(channels, 1, kernel_size, kernel_size)
     return kernel2d
 
-def gaussian_blur_batch(images, kernel_size=5, sigma=1.0):
+def gaussian_blur_batch(images, kernel_size=5, sigma=1.0, frame_transform_rate=0):
     b, c, h, w = images.shape
     kernel = get_gaussian_kernel(kernel_size, sigma, c).to(images.device)
     padding = kernel_size // 2
-    blurred = NF.conv2d(images, kernel, padding=padding, groups=c)
-    return blurred
+
+    if frame_transform_rate == 0:
+        blurred = NF.conv2d(images, kernel, padding=padding, groups=c)
+        return blurred
+
+    result = []
+    for i in range(b):
+        frame = images[i:i+1]  # shape = (1, c, h, w)
+        if (i + 1) % frame_transform_rate == 0:
+            blurred = NF.conv2d(frame, kernel, padding=padding, groups=c)
+            result.append(blurred)
+        else:
+            result.append(frame)
+
+    return torch.cat(result, dim=0)  # 回傳 shape (b, c, h, w)
