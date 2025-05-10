@@ -20,22 +20,22 @@ with g_pathmgr.open(ckpt_path, "rb") as f:
 
 state_dict_copy = state_dict.copy()
 
-# # 使用兩層迴圈插入 yolo_detection_head 的參數
-# for k, v in state_dict.items():  # 第一層
-#     if isinstance(v, dict):  # 如果值是字典，進入第二層
-#         # for k1 in v.keys():  # 第二層鍵
-#         #     # if "model" in k:  # 假設 "model" 是主要的層
-#         #     print(k1)
-#         # 過濾掉所有 "image_encoder.xxx" 的參數
-#         filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("memory_attention.") or k1.startswith("memory_encoder.") or k1.startswith("memory_encoder.mask_downsampler.") or k1.startswith("mask_downsample.") or k1.startswith("no_obj_ptr") or k1.startswith("image_encoder.") or k1.startswith("sam_prompt_encoder.") or k1.startswith("yolo_detection_head.") or k1.startswith("sam_mask_decoder.") or k1.startswith("obj_ptr_proj") or k1.startswith("obj_ptr_tpos_proj.") or k1.startswith("no_obj_embed_spatial"))}
+# 使用兩層迴圈插入 yolo_detection_head 的參數
+for k, v in state_dict.items():  # 第一層
+    if isinstance(v, dict):  # 如果值是字典，進入第二層
+        # for k1 in v.keys():  # 第二層鍵
+        #     # if "model" in k:  # 假設 "model" 是主要的層
+        #     print(k1)
+        # 過濾掉所有 "image_encoder.xxx" 的參數
+        filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("memory_encoder."))}
         
-#         # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
-#         if not filtered_v:
-#             del state_dict_copy[k]
-#         else:
-#             state_dict_copy[k] = filtered_v
-#     # else:
-#     #     print("other:", k)
+        # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
+        if not filtered_v:
+            del state_dict_copy[k]
+        else:
+            state_dict_copy[k] = filtered_v
+    # else:
+    #     print("other:", k)
 
 # # for k, v in state_dict_copy.items():  # 第一層
 # #     if isinstance(v, dict):  # 如果值是字典，進入第二層
@@ -129,7 +129,7 @@ state_dict_copy = state_dict.copy()
 # # for k, v in memory_attention.state_dict().items():  # 第一層
 # #     print(k)
 
-memory_attention_gate = nn.Linear(2 * 128, 128)
+# memory_attention_gate = nn.Linear(2 * 128, 128)
 # # # 使用兩層迴圈插入 yolo_detection_head 的參數
 # # transformer_dim=128
 # # activation = nn.GELU
@@ -149,7 +149,7 @@ memory_attention_gate = nn.Linear(2 * 128, 128)
 # # # sys.exit()
 
 # Temporal encoding of the memories
-num_maskmem = 2
+num_maskmem = 1
 mem_dim = 128
 maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
@@ -158,28 +158,28 @@ trunc_normal_(maskmem_tpos_enc, std=0.02)
 print("maskmem_tpos_enc Total elements:", maskmem_tpos_enc.numel())
 print("maskmem_tpos_enc Number of unique values:", torch.unique(maskmem_tpos_enc).numel())
 
-for k, v in state_dict_copy.items():  # 第一層
-    if isinstance(v, dict):  # 如果值是字典，進入第二層
-        for k1 in v.keys():  # 第二層鍵
-            # 在合適的層（例如 "model"）中插入 yolo_detection_head
-            if "model" in k:  # 假設 "model" 是主要的層
-                # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
-                #     v[f"yolo.detection_model.{param_name}"] = param_value
-                # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
-                #     v[f"freeze_model.model.{param_name}"] = param_value
-                # v["no_mem_embed"] = no_mem_embed
-                # v["no_mem_pos_enc"] = no_mem_pos_enc
-                # for param_name, param_value in memory_encoder.state_dict().items():
-                #     v[f"memory_encoder.{param_name}"] = param_value
-                # for param_name, param_value in memory_attention.state_dict().items():
-                #     v[f"memory_attention.{param_name}"] = param_value
-                # for param_name, param_value in output_upscaling.state_dict().items():
-                #     v[f"yolo.output_upscaling.{param_name}"] = param_value
-                v["maskmem_tpos_enc"] = maskmem_tpos_enc
-                for param_name, param_value in memory_attention_gate.state_dict().items():
-                    v[f"memory_attention.layers.0.gate.{param_name}"] = param_value
-                break  # 插入後結束第二層迴圈
-        break  # 插入後結束第一層迴圈
+# for k, v in state_dict_copy.items():  # 第一層
+#     if isinstance(v, dict):  # 如果值是字典，進入第二層
+#         for k1 in v.keys():  # 第二層鍵
+#             # 在合適的層（例如 "model"）中插入 yolo_detection_head
+#             if "model" in k:  # 假設 "model" 是主要的層
+#                 # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
+#                 #     v[f"yolo.detection_model.{param_name}"] = param_value
+#                 # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
+#                 #     v[f"freeze_model.model.{param_name}"] = param_value
+#                 # v["no_mem_embed"] = no_mem_embed
+#                 # v["no_mem_pos_enc"] = no_mem_pos_enc
+#                 # for param_name, param_value in memory_encoder.state_dict().items():
+#                 #     v[f"memory_encoder.{param_name}"] = param_value
+#                 # for param_name, param_value in memory_attention.state_dict().items():
+#                 #     v[f"memory_attention.{param_name}"] = param_value
+#                 # for param_name, param_value in output_upscaling.state_dict().items():
+#                 #     v[f"yolo.output_upscaling.{param_name}"] = param_value
+#                 # v["maskmem_tpos_enc"] = maskmem_tpos_enc
+#                 # for param_name, param_value in memory_attention_gate.state_dict().items():
+#                 #     v[f"memory_attention.layers.0.gate.{param_name}"] = param_value
+#                 break  # 插入後結束第二層迴圈
+#         break  # 插入後結束第一層迴圈
 for k, v in state_dict_copy.items():  # 第一層
     if isinstance(v, dict):  # 如果值是字典，進入第二層
         for k1 in v.keys():  # 第二層鍵
@@ -195,7 +195,8 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_39_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
 # output_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_recursive_residual.pt"
-output_path = "yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_memory_gate.pt"
+output_path = "yolov8s_m_num_maskmem_1_memory_position_0_only_pos_attentionlayer_1.pt"
+
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
 

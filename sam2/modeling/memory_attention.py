@@ -32,7 +32,9 @@ class MemoryAttentionLayer(nn.Module):
         two_sa: bool = False,
         # gate: bool = False,
         ca_gate: bool = False,
-        recursive_residual: bool = False,
+        recursive_residual: int = 0,
+        sa_mem: bool = False,
+        ca_mem: bool = False,
     ):
         super().__init__()
         self.d_model = d_model
@@ -63,15 +65,16 @@ class MemoryAttentionLayer(nn.Module):
 
         self.only_sa = only_sa
         self.two_sa = two_sa
-        if ca_gate or recursive_residual:
+        if ca_gate or (recursive_residual != 0):
             self.gate = nn.Linear(2 * d_model, d_model)
         self.ca_gate = ca_gate
         self.recursive_residual = recursive_residual
 
-        if self.pos_enc_at_cross_attn_keys and (self.ca_gate or self.recursive_residual):
+        if self.pos_enc_at_cross_attn_keys and (self.ca_gate or (recursive_residual != 0)):
                 # x_preds = self.yolo.forward_16_head_world(backbone_features)
                 raise ValueError(f'key pos enc add twice!! self.pos_enc_at_cross_attn_keys: {self.pos_enc_at_cross_attn_keys}, self.ca_gate: {self.ca_gate}, self.recursive_residual: {self.recursive_residual}')
-
+        self.sa_mem = sa_mem
+        self.ca_mem = ca_mem
 
     def _forward_sa(self, tgt, query_pos):
         # print("sa")
@@ -156,8 +159,9 @@ class MemoryAttentionLayer(nn.Module):
         memory,
         pos: Optional[Tensor] = None,
         query_pos: Optional[Tensor] = None,
-        num_k_exclude_rope: int = 0,
         curr_mem = None,
+        ca_do_sa: bool = False,
+        num_k_exclude_rope: int = 0,
     ) -> torch.Tensor:
 
         # Self-Attn, Cross-Attn
@@ -171,12 +175,17 @@ class MemoryAttentionLayer(nn.Module):
         # print("num_k_exclude_rope:", num_k_exclude_rope)
 
         tgt = self._forward_sa(tgt, query_pos)
-        # tgt_before_ca = tgt.clone()
+        if self.recursive_residual == 2:
+            tgt_before_ca = tgt.clone()
+        atten_mem = None
+        if self.sa_mem:
+            atten_mem = tgt.clone()
+            # print("sa_mem:", atten_mem[0][0][0])
         if not self.only_sa:
             if self.ca_gate:
                 gate_memory = self.memory_gating_ca(curr_mem, memory+pos)
                 tgt = self._forward_ca(tgt, gate_memory, query_pos, pos, num_k_exclude_rope)
-            elif self.recursive_residual:
+            elif self.recursive_residual == 1:
                 # tgt_clone = tgt.clone()
                 # memory_clone = memory.clone()
                 gate_memory = self.memory_gating_recursive_residual(tgt, memory+pos)
@@ -184,15 +193,26 @@ class MemoryAttentionLayer(nn.Module):
                 # print("memory_clone:", torch.equal(memory, memory_clone))
                 tgt = self._forward_ca(tgt, gate_memory, query_pos, pos, num_k_exclude_rope)
                 # sys.exit()
+            elif ca_do_sa:
+                tgt = self._forward_ca(tgt, tgt, query_pos, query_pos, num_k_exclude_rope)
+                # print("ca_do_sa")
             else:
+                # print("normal ca:", memory[0][0][0])
                 tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
             # print("dont need ca")
+        if self.ca_mem:
+            atten_mem = tgt.clone()
+            # print("ca_mem:", atten_mem[0][0][0])
+        
+        if self.recursive_residual == 2:
+            tgt = self.memory_gating_recursive_residual(tgt_before_ca, tgt)
+        # sys.exit()
 
         # MLP
         tgt2 = self.norm3(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
         tgt = tgt + self.dropout3(tgt2)
-        return tgt
+        return tgt, atten_mem
 
 
 class MemoryAttention(nn.Module):
@@ -224,6 +244,7 @@ class MemoryAttention(nn.Module):
         memory_pos: Optional[Tensor] = None,  # pos_enc for cross-attention inputs
         num_obj_ptr_tokens: int = 0,  # number of object pointer *tokens*
         curr_mem = None,
+        ca_do_sa: bool = False,
     ):
         if isinstance(curr, list):
             assert isinstance(curr_pos, list)
@@ -233,7 +254,7 @@ class MemoryAttention(nn.Module):
                 curr_pos[0],
             )
 
-        if not self.two_sa:
+        if (not self.two_sa) and (not ca_do_sa):
             assert (
                 curr.shape[1] == memory.shape[1]
             ), "Batch size must be the same for curr and memory"
@@ -246,7 +267,7 @@ class MemoryAttention(nn.Module):
             # Convert to batch first
             output = output.transpose(0, 1)
             curr_pos = curr_pos.transpose(0, 1)
-            if not self.two_sa:
+            if (not self.two_sa) and (not ca_do_sa):
                 memory = memory.transpose(0, 1)
                 memory_pos = memory_pos.transpose(0, 1)
 
@@ -255,12 +276,13 @@ class MemoryAttention(nn.Module):
             if isinstance(layer.cross_attn_image, RoPEAttention):
                 kwds = {"num_k_exclude_rope": num_obj_ptr_tokens}
 
-            output = layer(
+            output, atten_mem = layer(
                 tgt=output,
                 memory=memory,
                 pos=memory_pos,
                 query_pos=curr_pos,
                 curr_mem=curr_mem,
+                ca_do_sa=ca_do_sa,
                 **kwds,
             )
         normed_output = self.norm(output)
@@ -270,4 +292,4 @@ class MemoryAttention(nn.Module):
             normed_output = normed_output.transpose(0, 1)
             curr_pos = curr_pos.transpose(0, 1)
 
-        return normed_output
+        return normed_output, atten_mem

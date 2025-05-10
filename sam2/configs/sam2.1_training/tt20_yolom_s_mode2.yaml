@@ -1,13 +1,13 @@
 # @package _global_
 
 scratch:
-  mode: test #test #val #train # train_only
-  frame_transform_rate: 2
+  mode: test #val #train # train_only
+  # frame_transform_rate: 2
   # skip_n_frame: 2
   # select_frame: 0
-  num_maskmem: 2
+  num_maskmem: 1
   temp_pos_enc: True
-  init_cond_frames_mode: 1
+  init_cond_frames_mode: 2
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
   memory_position: 0
@@ -372,7 +372,7 @@ trainer:
     temp_pos_enc: ${scratch.temp_pos_enc}
     # select_frame: ${scratch.select_frame}
     # skip_n_frame: ${scratch.skip_n_frame}
-    frame_transform_rate: ${scratch.frame_transform_rate}
+    # frame_transform_rate: ${scratch.frame_transform_rate}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -628,7 +628,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

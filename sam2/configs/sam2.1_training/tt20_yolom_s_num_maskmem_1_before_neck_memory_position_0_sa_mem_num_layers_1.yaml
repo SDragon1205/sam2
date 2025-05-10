@@ -1,11 +1,11 @@
 # @package _global_
 
 scratch:
-  mode: test #test #val #train # train_only
-  frame_transform_rate: 2
+  mode: test #train2 #val #train # train_only
+  attention_encoder: True
   # skip_n_frame: 2
   # select_frame: 0
-  num_maskmem: 2
+  num_maskmem: 1
   temp_pos_enc: True
   init_cond_frames_mode: 1
   self_memory_encode: True
@@ -243,7 +243,7 @@ trainer:
         activation: relu
         dim_feedforward: 2048
         dropout: 0.1
-        pos_enc_at_attn: true
+        pos_enc_at_attn: True
         self_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
           rope_theta: 10000.0
@@ -253,7 +253,7 @@ trainer:
           downsample_rate: 1
           dropout: 0.1
         d_model: 128
-        pos_enc_at_cross_attn_keys: true
+        pos_enc_at_cross_attn_keys: True
         pos_enc_at_cross_attn_queries: false
         cross_attention:
           _target_: sam2.modeling.sam.transformer.RoPEAttention
@@ -266,6 +266,7 @@ trainer:
           dropout: 0.1
           # kv_in_dim: 128
         # only_sa: True
+        sa_mem: True
       num_layers: 1
 
     memory_encoder:
@@ -296,8 +297,8 @@ trainer:
             use_dwconv: True  # depth-wise convs
           num_layers: 2
         in_dim: 128
-        no_mask_downsampler: True
-        # only_pos: True
+        # no_mask_downsampler: True
+        only_pos: True
 
     num_maskmem: ${scratch.num_maskmem}
     image_size: ${scratch.resolution}
@@ -372,7 +373,7 @@ trainer:
     temp_pos_enc: ${scratch.temp_pos_enc}
     # select_frame: ${scratch.select_frame}
     # skip_n_frame: ${scratch.skip_n_frame}
-    frame_transform_rate: ${scratch.frame_transform_rate}
+    attention_encoder: ${scratch.attention_encoder}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -628,7 +629,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_only_pos_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

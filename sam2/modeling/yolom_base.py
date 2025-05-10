@@ -144,6 +144,7 @@ class YOLOMBase(torch.nn.Module):
         current_frame_transform: bool = False,
         frame_transform_rate: int = 0,
         memory_gating_ca: bool = False,
+        attention_encoder: bool = False,
     ):
         super().__init__()
 
@@ -282,6 +283,7 @@ class YOLOMBase(torch.nn.Module):
         self.prev_frame_idx_minus = prev_frame_idx_minus
         self.current_frame_transform = current_frame_transform
         self.frame_transform_rate = frame_transform_rate
+        self.attention_encoder = attention_encoder
 
         if self.current_frame_transform and self.frame_transform_rate != 0:
                 # x_preds = self.yolo.forward_16_head_world(backbone_features)
@@ -774,7 +776,7 @@ class YOLOMBase(torch.nn.Module):
             pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
             # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem)
             # sys.exit()
-            return pix_feat_with_mem, None
+            return pix_feat_with_mem, None, None
         if (not is_init_cond_frame or self.encode_first_frame or self.encode_frame_first) and not (self.prev1_frame_no_memory and frame_idx == 1):
             # Retrieve the memories encoded with the maskmem backbone
             to_cat_memory, to_cat_memory_pos_embed = [], []
@@ -1007,6 +1009,18 @@ class YOLOMBase(torch.nn.Module):
             # print("is_init_cond_frame")
             # for initial conditioning frames, encode them without using any previous memory
             # print("directly_add_no_mem_embed:", self.directly_add_no_mem_embed)
+            if self.attention_encoder:
+                # print("len(current_vision_feats):", len(current_vision_feats))
+                pix_feat_with_mem, atten_mem = self.memory_attention(
+                    curr=current_vision_feats,
+                    curr_pos=current_vision_pos_embeds,
+                    memory=current_vision_feats,
+                    memory_pos=current_vision_pos_embeds,
+                    num_obj_ptr_tokens=num_obj_ptr_tokens,
+                    ca_do_sa=True,
+                )
+                pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+                return pix_feat_with_mem, None, atten_mem
             if self.directly_add_no_mem_embed:
                 # directly add no-mem embedding (instead of using the transformer encoder)
                 # print("current_vision_feats[-1]:", current_vision_feats[-1].shape)
@@ -1023,7 +1037,7 @@ class YOLOMBase(torch.nn.Module):
                     current_bank = pix_feat_with_mem
                     # print("0 current_bank:", current_bank.shape, current_bank[0][0][0][0])
                 # sys.exit()
-                return pix_feat_with_mem, current_bank
+                return pix_feat_with_mem, current_bank, None
             # elif self.directly_use_no_mem_embed:
             #     # Use a dummy token on the first frame (to avoid empty memory input to tranformer encoder)
             #     to_cat_memory = [self.no_mem_embed.expand(1, B, self.mem_dim)]
@@ -1051,7 +1065,7 @@ class YOLOMBase(torch.nn.Module):
                     current_bank = pix_feat_with_mem
                     # print("0 current_bank:", current_bank.shape, current_bank[0][0][0][0])
                 # sys.exit()
-                return pix_feat_with_mem, current_bank
+                return pix_feat_with_mem, current_bank, None
             
             memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
             # else:
@@ -1066,20 +1080,23 @@ class YOLOMBase(torch.nn.Module):
         # print("current_out['maskmem_pos_enc']:", len(current_out['maskmem_pos_enc']), current_out['maskmem_pos_enc'][0].shape)
         # sys.exit()
         # current_out_maskmem_features = current_out['maskmem_features'].clone()
-        pix_feat_with_mem = self.memory_attention(
+        curr_mem=None
+        if self.memory_gating_ca:
+            curr_mem=current_out['maskmem_features']+current_out['maskmem_pos_enc'][0]
+        pix_feat_with_mem, atten_mem = self.memory_attention(
             curr=current_vision_feats,
             curr_pos=current_vision_pos_embeds,
             memory=memory,
             memory_pos=memory_pos_embed,
             num_obj_ptr_tokens=num_obj_ptr_tokens,
-            curr_mem=current_out['maskmem_features']+current_out['maskmem_pos_enc'][0],
+            curr_mem=curr_mem,
         )
         # print("current_out_maskmem_features:", torch.equal(current_out_maskmem_features, current_out['maskmem_features']))
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
         # print("pix_feat_with_mem1:", pix_feat_with_mem.shape, pix_feat_with_mem[0][0][0][0])
         # sys.exit()
-        return pix_feat_with_mem, current_bank
+        return pix_feat_with_mem, current_bank, atten_mem
 
     def _encode_new_memory(
         self,
@@ -1093,7 +1110,14 @@ class YOLOMBase(torch.nn.Module):
         """Encode the current image and its prediction into a memory feature."""
         C = self.hidden_dim
         H, W = feat_sizes[self.memory_position]
-        if self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
+        if self.attention_encoder:
+            # print("current_vision_feats:", current_vision_feats.shape)
+            B = current_vision_feats.size(0)
+            # B(HW)C => BCHW
+            pix_feat = current_vision_feats.permute(0, 2, 1).view(B, C, H, W)
+            # print("pix_feat:", pix_feat.shape)
+            # sys.exit()
+        elif self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
             B = current_vision_feats.size(0)
             pix_feat = current_vision_feats
         else:
@@ -1291,7 +1315,7 @@ class YOLOMBase(torch.nn.Module):
         # print("feat_sizes_prepare:", feat_sizes_prepare[0])
         # sys.exit()
 
-        pix_feat, current_bank = self._prepare_memory_conditioned_features(
+        pix_feat, current_bank, atten_mem = self._prepare_memory_conditioned_features(
             frame_idx=frame_idx,
             is_init_cond_frame=is_init_cond_frame,
             current_vision_feats=current_vision_feats_prepare,
@@ -1317,7 +1341,7 @@ class YOLOMBase(torch.nn.Module):
         # print("yolo_outputs[1]:", yolo_outputs[1][0].shape, yolo_outputs[1][1].shape, yolo_outputs[1][2].shape)
         # print("torch.equal(pix_feat, pix_feat_clone):", torch.equal(pix_feat, pix_feat_clone))
         # sys.exit()
-        return yolo_outputs, high_res_features, pix_feat, current_bank
+        return yolo_outputs, high_res_features, pix_feat, current_bank, atten_mem
 
     def visualize_output_tensor(self, output_tensor, batch_idx=0):
             """
@@ -1473,6 +1497,7 @@ class YOLOMBase(torch.nn.Module):
         init_cond_frames_gt,
         recursive_pix_feat,
         current_bank,
+        atten_mem,
         is_first_frame = False,
     ):
         # print("_encode_memory_in_output, current_vision_feats:", current_vision_feats[0][0][0][0])
@@ -1505,7 +1530,16 @@ class YOLOMBase(torch.nn.Module):
             # print("current_vision_feats:", pix_feat.shape, pix_feat)
             # print("recursive_pix_feat:", recursive_pix_feat[0].shape, recursive_pix_feat[0])
             # sys.exit()
-            if self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
+            if self.attention_encoder:
+                maskmem_features, maskmem_pos_enc = self._encode_new_memory(
+                    current_vision_feats=atten_mem,
+                    feat_sizes=feat_sizes,
+                    pred_masks_high_res=high_res_masks_for_mem_enc,
+                    # object_score_logits=object_score_logits,
+                    # is_mask_from_pts=(point_inputs is not None),
+                    is_first_frame=is_first_frame,
+                )
+            elif self.recursive_memory and (not is_first_frame) and (not self.fuse_backbone_and_attention) and (not self.fuse_backbone_and_bank):
                 # print("_encode_new_memory:", recursive_pix_feat.shape, recursive_pix_feat)
                 maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                     current_vision_feats=recursive_pix_feat,

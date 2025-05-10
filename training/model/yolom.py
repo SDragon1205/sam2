@@ -1066,18 +1066,18 @@ class YOLOMTrain(YOLOMBase):
         # print("current_vision_feats before self._track_step:", current_vision_feats.shape)
         if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first or self.memory_gating_ca:
             current_out = self._encode_memory_in_output(
-                current_vision_feats,
-                feat_sizes,
+                current_vision_feats=current_vision_feats,
+                feat_sizes=feat_sizes,
                 # point_inputs,
-                run_mem_encoder,
+                run_mem_encoder=run_mem_encoder,
                 # high_res_masks,
                 # object_score_logits,
                 # current_out,
-                None,
-                img_ids,
-                init_cond_frames_gt,
-                None,
-                None,
+                yolo_outputs=None,
+                img_ids=img_ids,
+                init_cond_frames_gt=init_cond_frames_gt,
+                recursive_pix_feat=None,
+                current_bank=None,
                 is_first_frame=True,
             )
             if self.encode_first_frame:
@@ -1090,7 +1090,7 @@ class YOLOMTrain(YOLOMBase):
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
         if self.memory_gating_ca:
-            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+            yolo_outputs, high_res_features, pix_feat, current_bank, atten_mem = self._track_step(
                 frame_idx,
                 is_init_cond_frame,
                 current_vision_feats,
@@ -1106,7 +1106,7 @@ class YOLOMTrain(YOLOMBase):
                 current_out,
             )
         elif self.current_frame_occluded_all or self.current_frame_transform or self.frame_transform_rate != 0:
-            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+            yolo_outputs, high_res_features, pix_feat, current_bank, atten_mem = self._track_step(
                 frame_idx,
                 is_init_cond_frame,
                 current_vision_feats_occluded,
@@ -1121,7 +1121,7 @@ class YOLOMTrain(YOLOMBase):
                 txt_feats,
             )
         else:
-            yolo_outputs, high_res_features, pix_feat, current_bank = self._track_step(
+            yolo_outputs, high_res_features, pix_feat, current_bank, atten_mem = self._track_step(
                 frame_idx,
                 is_init_cond_frame,
                 current_vision_feats,
@@ -1207,18 +1207,19 @@ class YOLOMTrain(YOLOMBase):
             if self.init_cond_frames_mode != 2 and (not self.encode_frame_first) and (not self.two_sa):
                 # print("self._encode_memory_in_output")
                 current_out = self._encode_memory_in_output(
-                    current_vision_feats,
-                    feat_sizes,
+                    current_vision_feats=current_vision_feats,
+                    feat_sizes=feat_sizes,
                     # point_inputs,
-                    run_mem_encoder,
+                    run_mem_encoder=run_mem_encoder,
                     # high_res_masks,
                     # object_score_logits,
                     # current_out,
-                    yolo_outputs_clone,
-                    img_ids,
-                    init_cond_frames_gt,
-                    pix_feat,
-                    current_bank,
+                    yolo_outputs=yolo_outputs_clone,
+                    img_ids=img_ids,
+                    init_cond_frames_gt=init_cond_frames_gt,
+                    recursive_pix_feat=pix_feat,
+                    current_bank=current_bank,
+                    atten_mem=atten_mem,
                 )
             else:
                 current_out = None

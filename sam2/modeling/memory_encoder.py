@@ -208,6 +208,7 @@ class MemoryEncoder(nn.Module):
             return {"vision_features": x, "vision_pos_enc": [pos]}
         
         if self.only_pos:
+            # print("only pos:", pix_feat[0][0][0][0])
             pos = self.position_encoding(pix_feat).to(pix_feat.dtype)
             return {"vision_features": pix_feat, "vision_pos_enc": [pos]}
         if self.no_mask_downsampler:
