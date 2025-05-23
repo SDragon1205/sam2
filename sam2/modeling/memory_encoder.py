@@ -214,13 +214,14 @@ class MemoryEncoder(nn.Module):
         if self.no_mask_downsampler:
             # print("=================================")
             # print("MemoryEncoder:")
-            # print("pix_feat:", pix_feat.shape)
+            # print("pix_feat:", pix_feat.shape, pix_feat[0][0][0][0])
             x = self.pix_feat_proj(pix_feat)
             # print("pix_feat_proj:", x.shape)
             x = self.fuser(x)
             # print("fuser:", x.shape)
             x = self.out_proj(x)
             # print("out_proj:", x.shape, x[0][0][0][0])
+            # print("=================================")
             pos = self.position_encoding(x).to(x.dtype)
             # print("position_encoding:", pos.shape)
             return {"vision_features": x, "vision_pos_enc": [pos]}
@@ -245,6 +246,7 @@ class MemoryEncoder(nn.Module):
 
         pos = self.position_encoding(x).to(x.dtype)
         # print("x:", x.shape)
+        # print("=================================")
         # print("pos:", pos.shape)
         # sys.exit()
         return {"vision_features": x, "vision_pos_enc": [pos]}

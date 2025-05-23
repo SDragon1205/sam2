@@ -14,7 +14,7 @@ from torch.nn.init import trunc_normal_
 # ckpt_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolom_s_num_maskmem_1_memory_position_0_no_mask_downsampler.yaml/checkpoints/checkpoint_old.pt"
 # ckpt_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_old.pt"
 
-ckpt_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+ckpt_path = "yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
 with g_pathmgr.open(ckpt_path, "rb") as f:
     state_dict = torch.load(f, map_location="cpu")
 
@@ -155,6 +155,13 @@ maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
 )
 trunc_normal_(maskmem_tpos_enc, std=0.02)
+x1, x2 = maskmem_tpos_enc[:1], maskmem_tpos_enc[1:]
+
+print(x1.shape)  # torch.Size([1, 1, 1, 128])
+print(x2.shape)  # torch.Size([2, 1, 1, 128])
+
+x1_squeezed = x1.squeeze(2)
+print(x1_squeezed.shape)  # torch.Size([1, 1, 128])
 print("maskmem_tpos_enc Total elements:", maskmem_tpos_enc.numel())
 print("maskmem_tpos_enc Number of unique values:", torch.unique(maskmem_tpos_enc).numel())
 
@@ -175,7 +182,8 @@ for k, v in state_dict_copy.items():  # 第一層
                 #     v[f"memory_attention.{param_name}"] = param_value
                 # for param_name, param_value in output_upscaling.state_dict().items():
                 #     v[f"yolo.output_upscaling.{param_name}"] = param_value
-                v["maskmem_tpos_enc"] = maskmem_tpos_enc
+                v["curr_maskmem_tpos_enc"] = x1_squeezed
+                v["maskmem_tpos_enc"] = x2
                 # for param_name, param_value in memory_attention_gate.state_dict().items():
                 #     v[f"memory_attention.layers.0.gate.{param_name}"] = param_value
                 break  # 插入後結束第二層迴圈
@@ -196,7 +204,7 @@ for k, v in state_dict_copy.items():  # 第一層
 # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
 # output_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_recursive_residual.pt"
 # output_path = "yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_memory_gate.pt"
-output_path = "yolov8s_m_num_maskmem_3_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+output_path = "yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1_sa_align.pt"
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
 

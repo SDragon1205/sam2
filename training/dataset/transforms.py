@@ -1069,7 +1069,15 @@ def gaussian_blur_batch(images, kernel_size=5, sigma=1.0, frame_transform_rate=0
     result = []
     for i in range(b):
         frame = images[i:i+1]  # shape = (1, c, h, w)
-        if (i + 1) % frame_transform_rate == 0:
+        if frame_transform_rate == -1:
+            # 只對最後一張圖做模糊
+            if i == b - 1:
+                blurred = NF.conv2d(frame, kernel, padding=padding, groups=c)
+                result.append(blurred)
+            else:
+                result.append(frame)
+
+        elif (i + 1) % frame_transform_rate == 0:
             blurred = NF.conv2d(frame, kernel, padding=padding, groups=c)
             result.append(blurred)
         else:

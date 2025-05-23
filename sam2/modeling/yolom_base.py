@@ -145,6 +145,8 @@ class YOLOMBase(torch.nn.Module):
         frame_transform_rate: int = 0,
         memory_gating_ca: bool = False,
         attention_encoder: bool = False,
+        sa_align: bool = False,
+        encode_before_attention: bool = False,
     ):
         super().__init__()
 
@@ -284,6 +286,13 @@ class YOLOMBase(torch.nn.Module):
         self.current_frame_transform = current_frame_transform
         self.frame_transform_rate = frame_transform_rate
         self.attention_encoder = attention_encoder
+        self.sa_align = sa_align
+        if sa_align:
+            self.curr_maskmem_tpos_enc = torch.nn.Parameter(
+                torch.zeros(1, 1, self.mem_dim)
+            )
+            trunc_normal_(self.curr_maskmem_tpos_enc, std=0.02)
+        self.encode_before_attention = encode_before_attention
 
         if self.current_frame_transform and self.frame_transform_rate != 0:
                 # x_preds = self.yolo.forward_16_head_world(backbone_features)
@@ -747,6 +756,10 @@ class YOLOMBase(torch.nn.Module):
         track_in_reverse=False,  # tracking in reverse time order (for demo usage)
         current_out=None,
     ):
+        # if self.sa_align:
+        #     print("current_vision_pos_embeds:", len(current_vision_pos_embeds), current_vision_pos_embeds[0].shape)
+        #     print("self.curr_maskmem_tpos_enc:", self.curr_maskmem_tpos_enc.shape, self.curr_maskmem_tpos_enc)
+        #     sys.exit()
         # print("============================================================================")
         # print("_prepare_memory_conditioned_features")
         """Fuse the current frame's visual feature map with previous memory."""
@@ -1083,9 +1096,26 @@ class YOLOMBase(torch.nn.Module):
         curr_mem=None
         if self.memory_gating_ca:
             curr_mem=current_out['maskmem_features']+current_out['maskmem_pos_enc'][0]
+        
+        if self.sa_align:
+            # print("current_vision_pos_embeds", len(current_vision_pos_embeds), current_vision_pos_embeds[0].shape)
+            # print("self.curr_maskmem_tpos_enc", self.curr_maskmem_tpos_enc.shape)
+            curr_pos = [current_vision_pos_embeds[0] + self.curr_maskmem_tpos_enc]
+            # print("curr_pos", len(curr_pos), curr_pos[0].shape)
+        else:
+            curr_pos = current_vision_pos_embeds
+        if self.encode_before_attention:
+            # print("current_vision_feats:", len(current_vision_feats), current_vision_feats[0].shape)
+            # print("current_out['maskmem_features']:", current_out['maskmem_features'].shape)
+            # print("current_out['maskmem_features'].permute(0, 2, 3, 1).reshape(-1, 1, self.hidden_dim):", current_out['maskmem_features'].permute(0, 2, 3, 1).reshape(-1, 1, self.hidden_dim).shape)
+            # print("curr_pos:", len(curr_pos), curr_pos[0].shape)
+            # sys.exit()
+            curr=[current_out['maskmem_features'].permute(0, 2, 3, 1).reshape(-1, 1, self.hidden_dim)]
+        else:
+            curr=current_vision_feats
         pix_feat_with_mem, atten_mem = self.memory_attention(
-            curr=current_vision_feats,
-            curr_pos=current_vision_pos_embeds,
+            curr=curr,
+            curr_pos=curr_pos,
             memory=memory,
             memory_pos=memory_pos_embed,
             num_obj_ptr_tokens=num_obj_ptr_tokens,
@@ -1497,7 +1527,7 @@ class YOLOMBase(torch.nn.Module):
         init_cond_frames_gt,
         recursive_pix_feat,
         current_bank,
-        atten_mem,
+        atten_mem=None,
         is_first_frame = False,
     ):
         # print("_encode_memory_in_output, current_vision_feats:", current_vision_feats[0][0][0][0])

@@ -262,6 +262,8 @@ class RoPEAttention(Attention):
         # this is needed for cross-attention to memories
         rope_k_repeat=False,
         feat_sizes=(64, 64),  # [w, h] for stride 16 feats at 1024 resolution
+        sa_align=False,
+        # r_freqs_cis=1, #repeat self.freqs_cis r times
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -274,6 +276,7 @@ class RoPEAttention(Attention):
             freqs_cis.to("cuda") if torch.cuda.is_available() else freqs_cis
         )
         self.rope_k_repeat = rope_k_repeat
+        self.sa_align = sa_align
 
     def forward(
         self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0
@@ -291,8 +294,9 @@ class RoPEAttention(Attention):
         # Apply rotary position encoding
         w = h = math.sqrt(q.shape[-2])
         self.freqs_cis = self.freqs_cis.to(q.device)
-        # print("before self.freqs_cis:", self.freqs_cis.shape)
-        if self.freqs_cis.shape[0] != q.shape[-2]:
+        # print("before self.freqs_cis:", self.freqs_cis.shape, q.shape)
+
+        if (self.freqs_cis.shape[0] != q.shape[-2]) and (not self.sa_align):
             # print("self.freqs_cis.shape[0] != q.shape[-2]")
             self.freqs_cis = self.compute_cis(end_x=w, end_y=h).to(q.device)
             # print("after self.freqs_cis:", self.freqs_cis.shape)
@@ -309,6 +313,7 @@ class RoPEAttention(Attention):
             k[:, :, :num_k_rope],
             freqs_cis=self.freqs_cis,
             repeat_freqs_k=self.rope_k_repeat,
+            sa_align=self.sa_align,
         )
         # print("after q:", q.shape)
         # print("after k:", k.shape)
@@ -319,5 +324,5 @@ class RoPEAttention(Attention):
 
         out = self._recombine_heads(out)
         out = self.out_proj(out)
-
+        # sys.exit()
         return out

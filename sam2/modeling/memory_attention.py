@@ -35,6 +35,9 @@ class MemoryAttentionLayer(nn.Module):
         recursive_residual: int = 0,
         sa_mem: bool = False,
         ca_mem: bool = False,
+        sa_align: bool = False,
+        ca_align: bool = False,
+        has_mlp: bool = True,
     ):
         super().__init__()
         self.d_model = d_model
@@ -75,6 +78,9 @@ class MemoryAttentionLayer(nn.Module):
                 raise ValueError(f'key pos enc add twice!! self.pos_enc_at_cross_attn_keys: {self.pos_enc_at_cross_attn_keys}, self.ca_gate: {self.ca_gate}, self.recursive_residual: {self.recursive_residual}')
         self.sa_mem = sa_mem
         self.ca_mem = ca_mem
+        self.sa_align = sa_align
+        self.ca_align = ca_align
+        self.has_mlp = has_mlp
 
     def _forward_sa(self, tgt, query_pos):
         # print("sa")
@@ -84,6 +90,18 @@ class MemoryAttentionLayer(nn.Module):
         q = k = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
         tgt2 = self.self_attn(q, k, v=tgt2)
         tgt = tgt + self.dropout1(tgt2)
+        return tgt
+    
+    def _forward_ca_align(self, tgt, query_pos, kv, kv_pos):
+        # print("sa")
+        # Self-Attention
+        # print("tgt[0][0][0]:", tgt[0][0][0])
+        tgt2 = self.norm1(tgt)
+        q = tgt2 + query_pos if self.pos_enc_at_attn else tgt2
+        k = kv + kv_pos if self.pos_enc_at_attn else kv
+        v = kv
+        tgt = self.self_attn(q, k, v=v)
+        # tgt = tgt + self.dropout1(tgt2)
         return tgt
 
     def _forward_ca(self, tgt, memory, query_pos, pos, num_k_exclude_rope=0):
@@ -173,8 +191,26 @@ class MemoryAttentionLayer(nn.Module):
         # print("query_pos:", query_pos.shape)
         # sys.exit()
         # print("num_k_exclude_rope:", num_k_exclude_rope)
-
-        tgt = self._forward_sa(tgt, query_pos)
+        if self.sa_align:
+            # tgt = self._forward_sa(tgt, query_pos)
+            # print("sa_align")
+            # print("tgt:", tgt.shape, tgt[0][0][0])
+            # print("query_pos:", query_pos.shape)
+            # print("memory:", memory.shape, memory[0][0][0])
+            # print("pos:", pos.shape)
+            tgt_len = tgt.size(1)
+            memory_len = memory.size(1)
+            tgt_memory = self._forward_sa(torch.cat([tgt, memory], dim=1), torch.cat([query_pos, pos], dim=1))
+            tgt, memory = torch.split(tgt_memory, [tgt_len, memory_len], dim=1)
+            # print("after _forward_sa tgt:", tgt.shape, tgt[0][0][0])
+            # print("after _forward_sa memory:", memory.shape, memory[0][0][0])
+        elif self.ca_align:
+            memory = self._forward_sa(torch.cat([tgt, memory], dim=1), torch.cat([query_pos, pos], dim=1))
+        else:
+            # print("sa")
+            # print("tgt:", tgt.shape, tgt[0][0][0])
+            # print("memory:", memory.shape, memory[0][0][0])
+            tgt = self._forward_sa(tgt, query_pos)
         if self.recursive_residual == 2:
             tgt_before_ca = tgt.clone()
         atten_mem = None
@@ -197,7 +233,9 @@ class MemoryAttentionLayer(nn.Module):
                 tgt = self._forward_ca(tgt, tgt, query_pos, query_pos, num_k_exclude_rope)
                 # print("ca_do_sa")
             else:
-                # print("normal ca:", memory[0][0][0])
+                # print("normal ca:")
+                # print("tgt:", tgt.shape, tgt[0][0][0])
+                # print("memory:", memory.shape, memory[0][0][0])
                 tgt = self._forward_ca(tgt, memory, query_pos, pos, num_k_exclude_rope)
             # print("dont need ca")
         if self.ca_mem:
@@ -209,9 +247,10 @@ class MemoryAttentionLayer(nn.Module):
         # sys.exit()
 
         # MLP
-        tgt2 = self.norm3(tgt)
-        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
-        tgt = tgt + self.dropout3(tgt2)
+        if self.has_mlp:
+            tgt2 = self.norm3(tgt)
+            tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
+            tgt = tgt + self.dropout3(tgt2)
         return tgt, atten_mem
 
 
@@ -253,6 +292,7 @@ class MemoryAttention(nn.Module):
                 curr[0],
                 curr_pos[0],
             )
+            # print("memory attention curr_pos:", curr_pos.shape)
 
         if (not self.two_sa) and (not ca_do_sa):
             assert (

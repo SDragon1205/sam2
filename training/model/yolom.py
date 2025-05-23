@@ -996,6 +996,9 @@ class YOLOMTrain(YOLOMBase):
                 # all_frame_outputs[1][i_img_ids] = yolo_outputs[1][output_idx]
                 # all_frame_outputs[2][i_img_ids] = yolo_outputs[2][output_idx]
                 output_idx = output_idx + 1
+            
+            # if stage_id == 2:
+            #     sys.exit()
 
         if return_dict:
             return output_dict
@@ -1064,7 +1067,7 @@ class YOLOMTrain(YOLOMBase):
         txt_feats=None,
     ):
         # print("current_vision_feats before self._track_step:", current_vision_feats.shape)
-        if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first or self.memory_gating_ca:
+        if (frame_idx == 0 and self.encode_first_frame and self.init_cond_frames_mode != 2) or self.encode_frame_first or self.memory_gating_ca or self.encode_before_attention:
             current_out = self._encode_memory_in_output(
                 current_vision_feats=current_vision_feats,
                 feat_sizes=feat_sizes,
@@ -1089,7 +1092,7 @@ class YOLOMTrain(YOLOMBase):
             # print("current_out:", current_out)
         # if frames_to_add_correction_pt is None:
         #     frames_to_add_correction_pt = []
-        if self.memory_gating_ca:
+        if self.memory_gating_ca or self.encode_before_attention:
             yolo_outputs, high_res_features, pix_feat, current_bank, atten_mem = self._track_step(
                 frame_idx,
                 is_init_cond_frame,
@@ -1203,7 +1206,7 @@ class YOLOMTrain(YOLOMBase):
             )
 
         # 呼叫函數
-        if not self.memory_gating_ca:
+        if (not self.memory_gating_ca) and (not self.encode_before_attention):
             if self.init_cond_frames_mode != 2 and (not self.encode_frame_first) and (not self.two_sa):
                 # print("self._encode_memory_in_output")
                 current_out = self._encode_memory_in_output(
@@ -1224,7 +1227,8 @@ class YOLOMTrain(YOLOMBase):
             else:
                 current_out = None
         # else:
-        #     print("self.memory_gating_ca", self.memory_gating_ca)
+        #     print("self.encode_before_attention", self.encode_before_attention)
+            # print("self.memory_gating_ca", self.memory_gating_ca)
 
         # # 比較 yolo_outputs[0]
         # if not torch.equal(yolo_outputs_clone[0], yolo_outputs[0]):
