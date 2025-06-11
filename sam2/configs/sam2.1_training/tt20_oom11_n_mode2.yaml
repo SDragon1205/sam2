@@ -1,14 +1,13 @@
 # @package _global_
 
 scratch:
-  mode: test #test #val #train2 # train_only
-  select_frame: 3
-  frame_transform_rate: -1
+  mode: train2 #test #val #train2 # train_only
+  # frame_transform_rate: 2
   # skip_n_frame: 2
   # select_frame: 0
-  num_maskmem: 2
+  num_maskmem: 1
   temp_pos_enc: True
-  init_cond_frames_mode: 1
+  init_cond_frames_mode: 2
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
   memory_position: 0
@@ -22,8 +21,8 @@ scratch:
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 6
-  train_num_frames: 4
-  val_num_frames: 4
+  train_num_frames: 20
+  val_num_frames: 20
   max_num_objects: 3
   base_lr: 5.0e-6
   vision_lr: 3.0e-06
@@ -31,7 +30,7 @@ scratch:
   num_epochs: 150
   reverse_time_prob: 0.5
   nc: 10
-  ch: [128, 256, 512]
+  ch: [128, 128, 256]
   stride: [ 8., 16., 32.]  # 640/80, 640/40, 640/20
   names:
     0: "pedestrian"
@@ -118,9 +117,9 @@ vos_train:
           saturation: 0.05
           hue: null
         - _target_: training.dataset.transforms.ToTensorAPI_yolo
-        - _target_: training.dataset.transforms.NormalizeAPI_yolo
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
+        # - _target_: training.dataset.transforms.NormalizeAPI_yolo
+        #   mean: [0.485, 0.456, 0.406]
+        #   std: [0.229, 0.224, 0.225]
 
 vos_val:
   train_transforms:
@@ -153,9 +152,9 @@ vos_val:
         #   saturation: 0.05
         #   hue: null
         - _target_: training.dataset.transforms.ToTensorAPI_yolo
-        - _target_: training.dataset.transforms.NormalizeAPI_yolo
-          mean: [0.485, 0.456, 0.406]
-          std: [0.229, 0.224, 0.225]
+        # - _target_: training.dataset.transforms.NormalizeAPI_yolo
+        #   mean: [0.485, 0.456, 0.406]
+        #   std: [0.229, 0.224, 0.225]
 
 # vos:
 #   train_transforms:
@@ -213,18 +212,18 @@ trainer:
     #     _target_: sam2.modeling.backbones.image_encoder.FpnNeck
     #     position_encoding:
     #       _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
-    #       num_pos_feats: 256
+    #       num_pos_feats: 128
     #       normalize: true
     #       scale: null
     #       temperature: 10000
-    #     d_model: 256
+    #     d_model: 128
     #     backbone_channel_list: [896, 448, 224, 112]
     #     fpn_top_down_levels: [2, 3]  # output level 0 and 1 directly use the backbone features
     #     fpn_interp_model: nearest
     yolo:
       _target_: sam2.modeling.backbones.yolo.yolo
       # model: /home/user/sdragon/sam2/checkpoints/yolov8s.pt
-      cfg: yolov8s.yaml
+      cfg: /home/user/sdragon/sam2/v2vdet/v2vdet_ultralytics/cfg/models/v2v/11/yolo11n-v2v-multiscale_1_3_5.yaml
       nc: ${scratch.nc}
       position_encoding:
         _target_: sam2.modeling.position_encoding.PositionEmbeddingSine
@@ -234,6 +233,7 @@ trainer:
         temperature: 10000
       has_output_upscaling: False
       norm_type: group
+      oo: True
 
     memory_attention:
       _target_: sam2.modeling.memory_attention.MemoryAttention
@@ -371,9 +371,10 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    select_frame: ${scratch.select_frame}
+    # select_frame: ${scratch.select_frame}
     # skip_n_frame: ${scratch.skip_n_frame}
-    frame_transform_rate: ${scratch.frame_transform_rate}
+    # frame_transform_rate: ${scratch.frame_transform_rate}
+    oo: True
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -580,7 +581,7 @@ trainer:
     all:
       _target_: training.loss_fns.DetectionLoss
       nc: ${scratch.nc}  # 假设检测类别数为 80
-      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 128, 64, 32
       stride: ${scratch.stride}
       box: 7.5
       cls: 0.5
@@ -588,7 +589,7 @@ trainer:
     val:
       _target_: training.loss_fns.DetectionLoss
       nc: ${scratch.nc}  # 假设检测类别数为 80
-      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 128, 64, 32
       stride: ${scratch.stride}
       box: 7.5
       cls: 0.5
@@ -596,7 +597,7 @@ trainer:
     test:
       _target_: training.loss_fns.DetectionLoss
       nc: ${scratch.nc}  # 假设检测类别数为 80
-      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 256, 64, 32
+      ch: ${scratch.ch}  # 假设有三个检测层，通道数分别为 128, 64, 32
       stride: ${scratch.stride}
       box: 7.5
       cls: 0.5
@@ -629,7 +630,7 @@ trainer:
 
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
-        checkpoint_path: ./checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
+        checkpoint_path: ./checkpoints/oom11_n_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt # "/home/user/sdragon/sam2/checkpoints/yolov8s_m.pt"
         ckpt_state_dict_keys: ['model']
 
 launcher:

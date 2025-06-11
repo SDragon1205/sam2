@@ -147,6 +147,7 @@ class YOLOMBase(torch.nn.Module):
         attention_encoder: bool = False,
         sa_align: bool = False,
         encode_before_attention: bool = False,
+        oo: bool = False,
     ):
         super().__init__()
 
@@ -321,6 +322,7 @@ class YOLOMBase(torch.nn.Module):
             self.text_model, _  = self.clip.load("ViT-B/32")#, device=self.yolo.detection_model.device)
             for p in self.text_model.parameters():
                 p.requires_grad_(False)
+        self.oo = oo
         
     @property
     def device(self):
@@ -578,7 +580,9 @@ class YOLOMBase(torch.nn.Module):
         #     image_embeddings=backbone_features,
         #     high_res_features=high_res_features,
         # )
-        if self.world:
+        if self.oo:
+            x_preds = self.yolo.forward_neck_head_oo(x_list=backbone_features, vpe=None)
+        elif self.world:
             if self.memory_before_16:
                 # x_preds = self.yolo.forward_16_head_world(backbone_features)
                 raise ValueError('forward_16_head_world not implement')
@@ -615,18 +619,24 @@ class YOLOMBase(torch.nn.Module):
         # sys.exit()
         # print("self.training:", self.training)
         # sys.exit()
+        # print("self.training:", self.training)
+        # print("self.yolo.detection_model.model[-1].export:", self.yolo.detection_model.model[-1].export)
         if not self.training:
+            # print("x_preds[0]:", x_preds[0].shape)
+            # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
+            # sys.exit()
             return x_preds
         
-        if self.world: # self.nc could be changed when inference with different texts
-            self.yolo.detection_model.model[22].no = self.yolo.detection_model.model[22].nc + self.yolo.detection_model.model[22].reg_max * 4
+        if self.world or self.oo: # self.nc could be changed when inference with different texts
+            self.yolo.detection_model.model[-1].no = self.yolo.detection_model.model[-1].nc + self.yolo.detection_model.model[-1].reg_max * 4
         # print("self.training:", self.training)
         # print("x_preds[0]:", x_preds[0].shape)
         # print("x_preds[1]:", x_preds[1][0].shape, x_preds[1][1].shape, x_preds[1][2].shape)
-        y_preds = self.yolo.detection_model.model[22]._inference(x_preds)
-        # print("y_preds[0]:", y_preds[0].shape)
-        # print("y_preds[1]:", y_preds[1][0].shape, y_preds[1][1].shape, y_preds[1][2].shape)
-
+        # y_preds = self.yolo.detection_model.model[22]._inference(x_preds)
+        y_preds = self.yolo.detection_model.model[-1]._inference(x_preds)
+        # print("y_preds:", y_preds.shape)
+        # print("x_preds:", x_preds[0].shape, x_preds[1].shape, x_preds[2].shape)
+        # sys.exit()
         return (y_preds, x_preds)
         # return x_preds
 
@@ -682,11 +692,14 @@ class YOLOMBase(torch.nn.Module):
     #         object_score_logits,
     #     )
 
-    def forward_image(self, img_batch: torch.Tensor):
+    def forward_image(self, img_batch: torch.Tensor, gtdata):
         """Get the image feature on the input batch."""
         # print("img_batch(max, min):", torch.max(img_batch), torch.min(img_batch))
         # sys.exit()
-        if self.world:
+        if self.oo:
+            self.yolo.inference_set_classes(img_batch, gtdata, [0])
+            backbone_out = self.yolo.forward_backbone_oo(img_batch)
+        elif self.world:
             if self.memory_before_16:
                 # need txt_feats
                 # backbone_out = self.yolo.forward_backbone_15_world(img_batch, txt_feats=txt_feats)
@@ -720,6 +733,7 @@ class YOLOMBase(torch.nn.Module):
         """Prepare and flatten visual features."""
         backbone_out = backbone_out.copy()
         assert len(backbone_out["backbone_fpn"]) == len(backbone_out["vision_pos_enc"])
+        # print("len(backbone_out[backbone_fpn]):", len(backbone_out["backbone_fpn"]))
         assert len(backbone_out["backbone_fpn"]) >= self.num_feature_levels
 
         feature_maps = backbone_out["backbone_fpn"][-self.num_feature_levels :]

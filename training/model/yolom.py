@@ -312,7 +312,9 @@ class YOLOMTrain(YOLOMBase):
             occluded_feats = self.forward_image(torch.ones_like(input.flat_img_batch))
         # print("occluded_feats:", occluded_feats)
         # flat_img_batch_clone = input.flat_img_batch.clone()
-        backbone_out = self.forward_image(input.flat_img_batch)
+        backbone_out = self.forward_image(input.flat_img_batch, input.gtdata)
+        # visualize_batched_video(batched_video=input)
+        # sys.exit()
         # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][0][0][0])
         # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0].shape)
         # print("torch.equal(flat_img_batch_clone, input.flat_img_batch):", torch.equal(flat_img_batch_clone, input.flat_img_batch))
@@ -903,6 +905,9 @@ class YOLOMTrain(YOLOMBase):
                 # ) = self._prepare_backbone_features_per_frame(
                 #     input.flat_img_batch, img_ids
                 # )
+            # if self.oo:
+            #     print("oo")
+            #     sys.exit()
 
             # Get output masks based on this frame's prompts and previous memory
             track_txt_feats = None

@@ -14,7 +14,7 @@ class maP50_Validator:
         self.max_det = max_det
         self.agnostic = agnostic
 
-        self.metrics = DetMetrics(save_dir=save_dir, on_plot=BaseValidator.on_plot)
+        self.metrics = DetMetrics(save_dir=save_dir) #, on_plot=BaseValidator.on_plot)
         self.metrics.names = names
         self.metrics.plot = False
         # self.confusion_matrix = ConfusionMatrix(nc=self.nc, conf=0.001)

@@ -1,8 +1,8 @@
 # @package _global_
 
 scratch:
-  mode: train2 #test #val #train2 # train_only
-  # select_frame: 19
+  mode: test #test #val #train2 # train_only
+  select_frame: 3
   frame_transform_rate: -1 #2
   # skip_n_frame: 2
   # select_frame: 0
@@ -371,7 +371,7 @@ trainer:
     use_origin_yolo_outputs_encode: ${scratch.use_origin_yolo_outputs_encode}
     self_memory_encode: ${scratch.self_memory_encode}
     temp_pos_enc: ${scratch.temp_pos_enc}
-    # select_frame: ${scratch.select_frame}
+    select_frame: ${scratch.select_frame}
     # skip_n_frame: ${scratch.skip_n_frame}
     frame_transform_rate: ${scratch.frame_transform_rate}
 

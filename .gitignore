@@ -15,3 +15,8 @@ tmp_trans/*
 grad_graph/*
 *.gz
 *.bak
+new_ultralytics/
+old_ultralytics/
+v2vdet/
+set_class/
+v2vdet_ultralytics
