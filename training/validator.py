@@ -188,8 +188,21 @@ class maP50_Validator:
         """Returns metrics statistics and results dictionary."""
         # self.stats = self.stats.detach()
         stats = {k: torch.cat(v, 0).detach().cpu().numpy() for k, v in self.stats.items()}  # to numpy
-        self.nt_per_class = np.bincount(stats["target_cls"].astype(int), minlength=self.nc)
-        self.nt_per_image = np.bincount(stats["target_img"].astype(int), minlength=self.nc)
+        try:
+            self.nt_per_class = np.bincount(stats["target_cls"].astype(int), minlength=self.nc)
+            self.nt_per_image = np.bincount(stats["target_img"].astype(int), minlength=self.nc)
+        except:
+            print("target_cls min:", stats["target_cls"].min())
+            print("target_cls:", stats["target_cls"])
+            print("len(stats['target_cls']):", len(stats['target_cls']))
+            print("len(stats['target_img']):", len(stats['target_img']))
+            print("self.nc:", self.nc)
+            valid_mask = stats["target_cls"] >= 0
+            target_cls = stats["target_cls"][valid_mask].astype(int)
+            target_img = stats["target_img"][valid_mask].astype(int)
+            print("new len(stats['target_cls']):", len(stats['target_cls']))
+            print("new len(stats['target_img']):", len(stats['target_img']))
+            raise KeyError
         stats.pop("target_img", None)
         if len(stats) and stats["tp"].any():
             self.metrics.process(**stats)

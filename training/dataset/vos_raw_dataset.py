@@ -906,3 +906,104 @@ class ImagenetDETDataset_yolo(VOSRawDataset_yolo):
         if name not in wnid_to_id:
             raise ValueError(f"[ERROR] Unknown class name: {name}")
         return wnid_to_id[name]
+    
+class ABO_Dataset_yolo(VOSRawDataset_yolo):
+    """
+    Dataset where the annotation in the format of visdrone task2 files
+    """
+
+    def __init__(
+        self,
+        img_folder,
+        gt_folder,
+        file_list_txt=None,
+        excluded_videos_list_txt=None,
+        # sample_rate=1,
+        # rm_unannotated=True,
+        # ann_every=1,
+        # frames_fps=24,
+    ):
+        self.gt_folder = gt_folder
+        self.img_folder = img_folder
+        # self.sample_rate = sample_rate
+        # self.rm_unannotated = rm_unannotated
+        # self.ann_every = ann_every
+        # self.frames_fps = frames_fps
+
+        # Read and process excluded files if provided
+        excluded_files = []
+        if excluded_videos_list_txt is not None:
+            if isinstance(excluded_videos_list_txt, str):
+                excluded_videos_lists = [excluded_videos_list_txt]
+            elif isinstance(excluded_videos_list_txt, ListConfig):
+                excluded_videos_lists = list(excluded_videos_list_txt)
+            else:
+                raise NotImplementedError
+
+            for excluded_videos_list_txt in excluded_videos_lists:
+                with open(excluded_videos_list_txt, "r") as f:
+                    excluded_files.extend(
+                        [os.path.splitext(line.strip())[0] for line in f]
+                    )
+        excluded_files = set(excluded_files)
+
+        # Read the subset defined in file_list_txt
+        if file_list_txt is not None:
+            with g_pathmgr.open(file_list_txt, "r") as f:
+                subset = [os.path.splitext(line.strip())[0] for line in f]
+        else:
+            subset = os.listdir(self.img_folder)
+
+        self.video_names = sorted(
+            [video_name for video_name in subset if video_name not in excluded_files]
+        )
+
+    def get_video(self, video_idx):
+        video_name = self.video_names[video_idx]
+        video_path = os.path.join(self.img_folder, video_name)
+        anno_path = os.path.join(self.gt_folder, video_name)
+
+        # 取得某張圖來抓圖片大小（所有 frame 同尺寸）
+        sample_image = cv2.imread(os.path.join(video_path, "0000001.jpg"))
+        img_h, img_w = sample_image.shape[:2]
+
+        # 所有影格檔名
+        frame_files = sorted(
+            [f for f in os.listdir(video_path) if f.endswith(".jpg") or f.endswith(".png") or f.endswith(".JPEG")]
+        )
+
+        frames = []
+        for frame_file in frame_files:
+            frame_idx = int(os.path.splitext(frame_file)[0])
+            image_path = os.path.join(video_path, frame_file)
+
+            # 找對應的 XML 標註檔
+            txt_file = os.path.join(anno_path, f"{frame_file.split('.')[0]}.txt")
+            classes, bboxes, occlusions = [], [], []
+
+            if os.path.exists(txt_file):
+                with open(txt_file, 'r') as f:
+                    base_lines = f.readlines()
+                
+                prev_bboxes = []
+                for line in base_lines:
+                    cls, x_center, y_center, w, h = map(float, line.strip().split())
+                    bboxes.append((x_center, y_center, w, h))
+                    classes.append(cls)
+
+            frame = VOSFrame_yolo(
+                frame_idx=frame_idx,
+                image_path=image_path,
+                bboxes=bboxes,
+                classes=classes,
+                scores=[1.0] * len(bboxes),           # 預設 score 為 1.0
+                truncation=[0] * len(bboxes),        # 無 truncation 時統一為 0
+                occlusion=[0] * len(bboxes)          # 無 occlusion 可用時預設為 0
+            )
+            frames.append(frame)
+
+        return VOSVideo_yolo(video_name, video_idx, frames, [img_h, img_w])
+
+    def __len__(self):
+        return len(self.video_names)
+    

@@ -148,6 +148,7 @@ class YOLOMBase(torch.nn.Module):
         sa_align: bool = False,
         encode_before_attention: bool = False,
         oo: bool = False,
+        set_class_skip_first_frame_memory: bool = False,
     ):
         super().__init__()
 
@@ -323,6 +324,7 @@ class YOLOMBase(torch.nn.Module):
             for p in self.text_model.parameters():
                 p.requires_grad_(False)
         self.oo = oo
+        self.set_class_skip_first_frame_memory = set_class_skip_first_frame_memory
         
     @property
     def device(self):

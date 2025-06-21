@@ -18,44 +18,45 @@ from v2vdet.v2vdet_ultralytics.nn.tasks_oo import V2V_With_MultiScale_SAVPE_Obje
 # ckpt_path = "/home/si2/sdragon/sam2/sam2_logs/configs/sam2.1_training/yolom_s_num_maskmem_1_memory_position_0_no_mask_downsampler.yaml/checkpoints/checkpoint_old.pt"
 # ckpt_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_old.pt"
 
-ckpt_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+# ckpt_path = "yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+ckpt_path = "oom11_n_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
 with g_pathmgr.open(ckpt_path, "rb") as f:
     state_dict = torch.load(f, map_location="cpu")
 
 state_dict_copy = state_dict.copy()
 
-# 使用兩層迴圈插入 yolo_detection_head 的參數
-for k, v in state_dict.items():  # 第一層
-    if isinstance(v, dict):  # 如果值是字典，進入第二層
-        # for k1 in v.keys():  # 第二層鍵
-        #     # if "model" in k:  # 假設 "model" 是主要的層
-        #     print(k1)
-        # 過濾掉所有 "image_encoder.xxx" 的參數
-        filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("yolo."))} #(k1.startswith("memory_attention.") or k1.startswith("memory_encoder.") or k1.startswith("memory_encoder.mask_downsampler.") or k1.startswith("mask_downsample.") or k1.startswith("no_obj_ptr") or k1.startswith("image_encoder.") or k1.startswith("sam_prompt_encoder.") or k1.startswith("yolo_detection_head.") or k1.startswith("sam_mask_decoder.") or k1.startswith("obj_ptr_proj") or k1.startswith("obj_ptr_tpos_proj.") or k1.startswith("no_obj_embed_spatial"))}
+# # 使用兩層迴圈插入 yolo_detection_head 的參數
+# for k, v in state_dict.items():  # 第一層
+#     if isinstance(v, dict):  # 如果值是字典，進入第二層
+#         # for k1 in v.keys():  # 第二層鍵
+#         #     # if "model" in k:  # 假設 "model" 是主要的層
+#         #     print(k1)
+#         # 過濾掉所有 "image_encoder.xxx" 的參數
+#         filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("yolo."))} #(k1.startswith("memory_attention.") or k1.startswith("memory_encoder.") or k1.startswith("memory_encoder.mask_downsampler.") or k1.startswith("mask_downsample.") or k1.startswith("no_obj_ptr") or k1.startswith("image_encoder.") or k1.startswith("sam_prompt_encoder.") or k1.startswith("yolo_detection_head.") or k1.startswith("sam_mask_decoder.") or k1.startswith("obj_ptr_proj") or k1.startswith("obj_ptr_tpos_proj.") or k1.startswith("no_obj_embed_spatial"))}
         
-        # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
-        if not filtered_v:
-            del state_dict_copy[k]
-        else:
-            state_dict_copy[k] = filtered_v
-    # else:
-    #     print("other:", k)
+#         # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
+#         if not filtered_v:
+#             del state_dict_copy[k]
+#         else:
+#             state_dict_copy[k] = filtered_v
+#     # else:
+#     #     print("other:", k)
 
-for k, v in state_dict.items():  # 第一層
-    if isinstance(v, dict):  # 如果值是字典，進入第二層
-        # for k1 in v.keys():  # 第二層鍵
-        #     # if "model" in k:  # 假設 "model" 是主要的層
-        #     print(k1)
-        # 過濾掉所有 "image_encoder.xxx" 的參數
-        filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("yolo."))}
+# for k, v in state_dict.items():  # 第一層
+#     if isinstance(v, dict):  # 如果值是字典，進入第二層
+#         # for k1 in v.keys():  # 第二層鍵
+#         #     # if "model" in k:  # 假設 "model" 是主要的層
+#         #     print(k1)
+#         # 過濾掉所有 "image_encoder.xxx" 的參數
+#         filtered_v = {k1: v1 for k1, v1 in v.items() if not (k1.startswith("yolo."))}
         
-        # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
-        if not filtered_v:
-            del state_dict_copy[k]
-        else:
-            state_dict_copy[k] = filtered_v
-    # else:
-    #     print("other:", k)
+#         # 如果 `filtered_v` 變成空的，就直接刪掉 `k`
+#         if not filtered_v:
+#             del state_dict_copy[k]
+#         else:
+#             state_dict_copy[k] = filtered_v
+#     # else:
+#     #     print("other:", k)
 
 # # for k, v in state_dict_copy.items():  # 第一層
 # #     if isinstance(v, dict):  # 如果值是字典，進入第二層
@@ -187,7 +188,7 @@ memory_attention= MemoryAttention(
 # # # # sys.exit()
 
 # Temporal encoding of the memories
-num_maskmem = 1
+num_maskmem = 2
 mem_dim = 128
 maskmem_tpos_enc = torch.nn.Parameter(
     torch.zeros(num_maskmem, 1, 1, mem_dim)
@@ -201,8 +202,8 @@ for k, v in state_dict_copy.items():  # 第一層
         for k1 in v.keys():  # 第二層鍵
             # 在合適的層（例如 "model"）中插入 yolo_detection_head
             if "model" in k:  # 假設 "model" 是主要的層
-                for param_name, param_value in state_dict_yolo['model'].state_dict().items():
-                    v[f"yolo.detection_model.{param_name}"] = param_value
+                # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
+                #     v[f"yolo.detection_model.{param_name}"] = param_value
                 # # for param_name, param_value in text_model.state_dict().items():
                 # #     v[f"text_model.{param_name}"] = param_value
                 # # for param_name, param_value in state_dict_yolo['model'].state_dict().items():
@@ -215,7 +216,7 @@ for k, v in state_dict_copy.items():  # 第一層
                 #     v[f"memory_attention.{param_name}"] = param_value
                 # # for param_name, param_value in output_upscaling.state_dict().items():
                 # #     v[f"yolo.output_upscaling.{param_name}"] = param_value
-                # v["maskmem_tpos_enc"] = maskmem_tpos_enc
+                v["maskmem_tpos_enc"] = maskmem_tpos_enc
                 break  # 插入後結束第二層迴圈
         break  # 插入後結束第一層迴圈
 for k, v in state_dict_copy.items():  # 第一層
@@ -232,7 +233,7 @@ for k, v in state_dict_copy.items():  # 第一層
 # # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_1_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_39_memory_position_0_no_mask_downsampler_attentionlayer_1.pt"
 # # output_path = "/home/si2/sdragon/sam2/checkpoints/yolov8s_m_num_maskmem_2_memory_position_0_no_mask_downsampler_attentionlayer_1_emcoder_out_dim_64.pt"
-output_path = "oom11_n_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
+output_path = "oom11_n_num_maskmem_2_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt"
 # 儲存新的模型權重
 torch.save(state_dict_copy, output_path)
 

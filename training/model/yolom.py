@@ -474,7 +474,10 @@ class YOLOMTrain(YOLOMBase):
             # print("num_init_cond_frames - 1:", num_init_cond_frames - 1)
             # print("num_frames:", num_frames)
         elif self.init_cond_frames_mode == 1:
-            init_cond_frames = [start_frame_idx]
+            if self.set_class_skip_first_frame_memory:
+                init_cond_frames = [start_frame_idx, start_frame_idx+1]
+            else:
+                init_cond_frames = [start_frame_idx]
         elif self.init_cond_frames_mode == 2:
             init_cond_frames = [
                 t for t in range(start_frame_idx, num_frames)
@@ -947,7 +950,7 @@ class YOLOMTrain(YOLOMBase):
             #     and stage_id in frames_to_add_correction_pt
             # )
             # print("self.init_cond_frames_mode != 2 and (not self.two_sa) and (not self.encode_frame_first):", self.init_cond_frames_mode != 2 and (not self.two_sa) and (not self.encode_frame_first))
-            if self.init_cond_frames_mode != 2 and (not self.two_sa) and (not self.encode_frame_first):
+            if self.init_cond_frames_mode != 2 and (not self.two_sa) and (not self.encode_frame_first) and (not (self.set_class_skip_first_frame_memory and stage_id == 0)):
                 # print("self.init_cond_frames_mode != 2")
                 if self.use_gt_in_all_frame:
                     output_dict["cond_frame_outputs"][0] = current_out

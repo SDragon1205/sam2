@@ -267,6 +267,7 @@ class Trainer_yolo:
         meters: Optional[Dict[str, Any]] = None,
         loss: Optional[Dict[str, Any]] = None,
         validator: Dict[str, Any],
+        freeze_yolo = False,
     ):
 
         self._setup_env_variables(env_variables)
@@ -286,6 +287,7 @@ class Trainer_yolo:
         cuda = CudaConf(**cuda or {})
         self.where = 0.0
         self.validator_conf = validator
+        self.freeze_yolo = freeze_yolo
 
         self._infer_distributed_backend_if_none(distributed, accelerator)
 
@@ -330,6 +332,13 @@ class Trainer_yolo:
 
         self.load_checkpoint()
         self._setup_ddp_distributed_training(distributed, accelerator)
+
+        if self.freeze_yolo:
+            for name, param in self.model.module.yolo.named_parameters():
+                # print(f"Parameter Name: {name}, requires_grad: {param.requires_grad}, Shape: {param.shape}")
+                param.requires_grad = False
+                print(f"Parameter Name: {name}, requires_grad: {param.requires_grad}, Shape: {param.shape}")
+                
         barrier()
 
     def _setup_timers(self):
@@ -399,8 +408,10 @@ class Trainer_yolo:
         self.model = nn.parallel.DistributedDataParallel(
             self.model,
             device_ids=[self.local_rank] if accelerator == "cuda" else [],
-            find_unused_parameters=distributed_conf.find_unused_parameters,
+            find_unused_parameters=True, #distributed_conf.find_unused_parameters,
         )
+        # print("find_unused_parameters")
+        # sys.exit()
         if distributed_conf.comms_dtype is not None:  # noqa
             from torch.distributed.algorithms import ddp_comm_hooks
 
@@ -737,7 +748,7 @@ class Trainer_yolo:
                     f.write(json.dumps(outs) + "\n")
 
             # Save checkpoint before validating
-            # self.save_checkpoint(self.epoch + 1)
+            self.save_checkpoint(self.epoch + 1)
             self.save_checkpoint(self.epoch + 1, ["new"])
 
             del dataloader
@@ -934,8 +945,8 @@ class Trainer_yolo:
                 if self.epoch < 70:
                     self.save_checkpoint(self.epoch + 1, ["best_before_70"])
                 elif self.epoch < 90:
-                    if self.mode == "train":
-                        self.save_checkpoint(self.epoch + 1)
+                    # if self.mode == "train":
+                    #     self.save_checkpoint(self.epoch + 1)
                     self.save_checkpoint(self.epoch + 1, ["best_before_90"])
         # elif self.mode == "train2":
         #     self.logger.log(f"Metrics/val_Images", seen, self.epoch)
@@ -1125,8 +1136,8 @@ class Trainer_yolo:
             # if self.epoch == 70 or self.epoch == 90:
             #     self.test_best_map50 = 0
             if result2 > self.test_best_map50:
-                if self.mode == "train2":
-                    self.save_checkpoint(self.epoch + 1)
+                # if self.mode == "train2":
+                #     self.save_checkpoint(self.epoch + 1)
                 self.save_checkpoint(self.epoch + 1, ["test_best"])
                 # self.save_checkpoint(self.epoch + 1)
                 self.test_best_map50 = result2
@@ -1201,6 +1212,10 @@ class Trainer_yolo:
             )  # move tensors in a tensorclass
 
             try:
+                if batch.gtdata['batch_idx'].nelement() == 0:
+                    continue
+                # print("batch.gtdata:", batch.gtdata)
+                # sys.exit()
                 self._run_step(batch, phase, loss_mts, extra_loss_mts)
 
                 # compute gradient and do optim step
@@ -1268,6 +1283,9 @@ class Trainer_yolo:
                         )
 
             # Catching NaN/Inf errors in the loss
+            # except Exception as e:
+            #     print(f"[Warning] Backward pass failed due to: {e}. Skipping this batch.")
+            #     continue
             except FloatingPointError as e:
                 raise e
             
@@ -1401,6 +1419,11 @@ class Trainer_yolo:
         # dot.render("grad_graph", format="png")#.view()
         # sys.exit()
         self.scaler.scale(loss).backward()
+        # try:
+        #     self.scaler.scale(loss).backward()
+        # except Exception as e:
+        #     print(f"[Warning] Backward pass failed due to: {e}. Skipping this batch.")
+        #     return
         # sys.exit()
         loss_mts[loss_key].update(loss.item(), batch_size)
         for extra_loss_key, extra_loss in extra_losses.items():

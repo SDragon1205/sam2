@@ -144,6 +144,11 @@ class yolo(nn.Module):
         imgs_list = []
         visual_prompt_list = []
         cls_unique_list = []
+        gts = {
+            'bboxes': [],
+            'cls': [],
+            'batch_idx': [],
+        }
         for idx in batch_idx:
             pil_img = self.select_img_batch(imgs, idx).squeeze(0)
             # def tensor_to_pil_image(tensor: torch.Tensor) -> Image.Image:
@@ -154,39 +159,82 @@ class yolo(nn.Module):
             #     return Image.fromarray(img.cpu().numpy())
             # pil_img = tensor_to_pil_image(img)
             # print(f"self.select_img_batch(imgs, {idx}).squeeze(0):", img.shape)
+            # gtdata = {
+            #     'batch_idx': torch.tensor([0.]),
+            #     'bboxes': torch.tensor([[0.4450, 0.4169, 0.0286, 0.0622]]),
+            #     'cls': torch.tensor([0.]),
+            #     'ori_shape': torch.tensor([[640, 640]]),
+            # }
+            # gtdata = {
+            #     'batch_idx': torch.tensor([0., 0.]),
+            #     'bboxes': torch.tensor([[0.4450, 0.4169, 0.0286, 0.0622],[0.4450, 0.4169, 0.0286, 0.0622]]),
+            #     'cls': torch.tensor([0., 0.]),
+            #     'ori_shape': torch.tensor([[640, 640],[640, 640]]),
+            # }
             imgs_list.append(pil_img)
             gt = self.select_frame_gtdata(gtdata, idx)
+            # print("gt:", gt)
             # print("gt:", gt)
             visual_prompt_label = {
                 'img': transform_visual_prompt(pil_img),
                 'bboxes': gt['bboxes'],
                 'cls': gt['cls'],
             }
+            visual_prompt_label = {
+                'img': transform_visual_prompt(pil_img),
+                'bboxes': gt['bboxes'],
+                'cls': gt['cls'],
+            }
+
 
             load_visual_prompt_func = LoadVisualPrompt()
-            visual_prompt_label, cls_unique = load_visual_prompt_func(labels=visual_prompt_label, nc=self.nc)
+            visual_prompt_label, cls_unique = load_visual_prompt_func(labels=visual_prompt_label) #, nc=self.nc)
+            if cls_unique == None:
+                print("====================================================================================")
+                print("                                NO ANNO IN GROUNDTRUTH                              ")
+                print("====================================================================================")
+                print("gt['batch_idx'].nelement():", gt['batch_idx'].nelement())
+                print("gt['batch_idx']:", gt['batch_idx'])
+                print("gt['bboxes'].nelement():", gt['bboxes'].nelement())
+                print("gt['bboxes']:", gt['bboxes'])
+                print("gt['cls'].nelement():", gt['cls'].nelement())
+                print("gt['cls']:", gt['cls'])
+                self.vpe = torch.zeros(1, self.nc, 512, device=device)
+                self.detection_model.nc = self.detection_model.vpe.shape[1]
+                self.detection_model.model[-1].nc = self.detection_model.nc
+                return
             # visual_prompt_label = load_visual_prompt_func(labels=visual_prompt_label)
             visual_prompt_list.append(visual_prompt_label['visuals'])
             cls_unique_list.append(cls_unique)
+            if idx == batch_idx[0]:
+                gts = {
+                    'bboxes': gt['bboxes'],
+                    'cls': gt['cls'],
+                    'batch_idx': gt['batch_idx'],
+                }
+            else:
+                gts['bboxes'] = torch.cat(gts['bboxes'], gt['bboxes'])
+                gts['cls'] = torch.cat(gts['cls'], gt['cls'])
+                gts['batch_idx'] = torch.cat(gts['batch_idx'], gt['batch_idx'])
             # print("visual_prompt_label['visuals']:", visual_prompt_label['visuals'].shape)
 
-            # from torchvision.transforms.functional import to_pil_image
-            # to_pil_image(pil_img.cpu()).save("set_class/img_0.png")
-            # visuals = visual_prompt_label['visuals']
-            # torch.save(visual_prompt_label['visuals'], "set_class/visuals.pt")
-            # for i in range(visuals.shape[0]):
-            #     mask = visuals[i]  # shape: [80, 80]
-            #     print(f"visuals[{i}]", torch.unique(mask))
-            #     pil_img = to_pil_image(mask.cpu().unsqueeze(0))  # 加上 channel 維度，變 [1, 80, 80]
-            #     pil_img.save(f"set_class/visual_mask_{i}.png")
+        #     from torchvision.transforms.functional import to_pil_image
+        #     to_pil_image(pil_img.cpu()).save("set_class/img_0.png")
+        #     visuals = visual_prompt_label['visuals']
+        #     torch.save(visual_prompt_label['visuals'], "set_class/visuals.pt")
+        #     for i in range(visuals.shape[0]):
+        #         mask = visuals[i]  # shape: [80, 80]
+        #         print(f"visuals[{i}]", torch.unique(mask))
+        #         pil_img = to_pil_image(mask.cpu().unsqueeze(0))  # 加上 channel 維度，變 [1, 80, 80]
+        #         pil_img.save(f"set_class/visual_mask_{i}.png")
 
-            # print("img:", img.shape, torch.max(img), torch.min(img))
-            # print("gt", gt)
-            # pil_img.save("tmp/inference_set_classes.jpg")  # 儲存圖片
-            # print("visual_prompt_label['visuals']:", visual_prompt_label['visuals'].shape)
-            # print("visual_prompt_label['visuals'].shape[0]:", visual_prompt_label['visuals'].shape[0])
-            # for i_v in range(visual_prompt_label['visuals'].shape[0]):
-            #     print(f"visual_prompt_label['visuals'][{i_v}]:", visual_prompt_label['visuals'][i_v].shape, torch.max(visual_prompt_label['visuals'][i_v]), torch.min(visual_prompt_label['visuals'][i_v]))
+        #     # print("img:", img.shape, torch.max(img), torch.min(img))
+        #     print("gt", gt)
+        #     pil_img.save("tmp/inference_set_classes.jpg")  # 儲存圖片
+        #     print("visual_prompt_label['visuals']:", visual_prompt_label['visuals'].shape)
+        #     print("visual_prompt_label['visuals'].shape[0]:", visual_prompt_label['visuals'].shape[0])
+        #     for i_v in range(visual_prompt_label['visuals'].shape[0]):
+        #         print(f"visual_prompt_label['visuals'][{i_v}]:", visual_prompt_label['visuals'][i_v].shape, torch.max(visual_prompt_label['visuals'][i_v]), torch.min(visual_prompt_label['visuals'][i_v]))
         # sys.exit()
         visuals_tensor = torch.stack(visual_prompt_list)
         # print("visuals_tensor:", visuals_tensor.shape)
@@ -194,39 +242,40 @@ class yolo(nn.Module):
         img_tensor_list = [transform_vision_encoder(img) for img in imgs_list]
         batch_tensor = torch.stack(img_tensor_list)
         # print("batch_tensor:", batch_tensor.shape)
+        self.detection_model.set_classes(nc=self.nc, imgs=batch_tensor, batch_cls=gts['cls'], bboxes=gts['bboxes'], batch_idx=gts['batch_idx'], visuals=visuals_tensor)
 
-        # For Vision Encoder
-        vision_encoder_inputs = {'pixel_values': batch_tensor.to(device)}
+        # # For Vision Encoder
+        # vision_encoder_inputs = {'pixel_values': batch_tensor.to(device)}
 
-        # print("isinstance(self.detection_model.vision_encoder, pe.VisionTransformer):", isinstance(self.detection_model.vision_encoder, pe.VisionTransformer), self.detection_model.vision_encoder)
-        if isinstance(self.detection_model.vision_encoder, pe.VisionTransformer):
-            vision_model_output = self.detection_model.vision_encoder(vision_encoder_inputs['pixel_values'], output_hidden_list=self.detection_model.want_layers, strip_cls_token=True)
-            savpe_input = vision_model_output['hidden_states'].permute(1, 0, 2, 3)
-            self.detection_model.vpe = self.detection_model.patch_emb_savpe(savpe_input, visuals_tensor)
-        else:
-            vision_model_output = self.detection_model.vision_encoder(**vision_encoder_inputs, output_hidden_states=True, return_dict=True)
-            hidden_states_list = [[] for _ in range(len(self.detection_model.want_layers))]
-            for idx, layer_num in enumerate(self.detection_model.want_layers):
-                hidden_states_list[idx] = vision_model_output['hidden_states'][layer_num]
-            hidden_states_tensor = torch.stack(tensors=hidden_states_list, dim=1)
-            # print("hidden_states_tensor:", hidden_states_tensor.shape)
-            self.detection_model.vpe = self.detection_model.patch_emb_savpe(hidden_states_tensor, visuals_tensor)
-            # print("self.detection_model.vpe:", self.detection_model.vpe.shape)
-        # print("cls_unique:", cls_unique)
-        # for i_v in range(self.detection_model.vpe.shape[0]):
-        #     for j_v in range(self.detection_model.vpe.shape[1]):
-        #         print(f"self.detection_model.vpe[i_v][{j_v}]:", self.detection_model.vpe[i_v][j_v].shape, torch.max(self.detection_model.vpe[i_v][j_v]), torch.min(self.detection_model.vpe[i_v][j_v]))
+        # # print("isinstance(self.detection_model.vision_encoder, pe.VisionTransformer):", isinstance(self.detection_model.vision_encoder, pe.VisionTransformer), self.detection_model.vision_encoder)
+        # if isinstance(self.detection_model.vision_encoder, pe.VisionTransformer):
+        #     vision_model_output = self.detection_model.vision_encoder(vision_encoder_inputs['pixel_values'], output_hidden_list=self.detection_model.want_layers, strip_cls_token=True)
+        #     savpe_input = vision_model_output['hidden_states'].permute(1, 0, 2, 3)
+        #     self.detection_model.vpe = self.detection_model.patch_emb_savpe(savpe_input, visuals_tensor)
+        # else:
+        #     vision_model_output = self.detection_model.vision_encoder(**vision_encoder_inputs, output_hidden_states=True, return_dict=True)
+        #     hidden_states_list = [[] for _ in range(len(self.detection_model.want_layers))]
+        #     for idx, layer_num in enumerate(self.detection_model.want_layers):
+        #         hidden_states_list[idx] = vision_model_output['hidden_states'][layer_num]
+        #     hidden_states_tensor = torch.stack(tensors=hidden_states_list, dim=1)
+        #     # print("hidden_states_tensor:", hidden_states_tensor.shape)
+        #     self.detection_model.vpe = self.detection_model.patch_emb_savpe(hidden_states_tensor, visuals_tensor)
+        #     # print("self.detection_model.vpe:", self.detection_model.vpe.shape)
+        # # print("cls_unique:", cls_unique)
+        # # for i_v in range(self.detection_model.vpe.shape[0]):
+        # #     for j_v in range(self.detection_model.vpe.shape[1]):
+        # #         print(f"self.detection_model.vpe[i_v][{j_v}]:", self.detection_model.vpe[i_v][j_v].shape, torch.max(self.detection_model.vpe[i_v][j_v]), torch.min(self.detection_model.vpe[i_v][j_v]))
         
-        for i in range(self.detection_model.vpe.shape[0]):
-            for j in range(self.detection_model.vpe.shape[1]):  # loop over class indices
-                if j not in cls_unique_list[i]:
-                    self.detection_model.vpe[i][j] = 0
+        # for i in range(self.detection_model.vpe.shape[0]):
+        #     for j in range(self.detection_model.vpe.shape[1]):  # loop over class indices
+        #         if j not in cls_unique_list[i]:
+        #             self.detection_model.vpe[i][j] = 0
         
-        # for i_v in range(self.detection_model.vpe.shape[0]):
-        #     for j_v in range(self.detection_model.vpe.shape[1]):
-        #         print(f"after self.detection_model.vpe[i_v][{j_v}]:", self.detection_model.vpe[i_v][j_v].shape, torch.max(self.detection_model.vpe[i_v][j_v]), torch.min(self.detection_model.vpe[i_v][j_v]))
+        # # for i_v in range(self.detection_model.vpe.shape[0]):
+        # #     for j_v in range(self.detection_model.vpe.shape[1]):
+        # #         print(f"after self.detection_model.vpe[i_v][{j_v}]:", self.detection_model.vpe[i_v][j_v].shape, torch.max(self.detection_model.vpe[i_v][j_v]), torch.min(self.detection_model.vpe[i_v][j_v]))
 
-        # print("self.detection_model.vpe.shape[1]:", self.detection_model.vpe.shape[1])
+        # # print("self.detection_model.vpe.shape[1]:", self.detection_model.vpe.shape[1])
         self.detection_model.nc = self.detection_model.vpe.shape[1]
         self.detection_model.model[-1].nc = self.detection_model.nc
         # sys.exit()
@@ -799,7 +848,19 @@ class LoadVisualPrompt:
 
         cls_unique, inverse_indices = torch.unique(category, sorted=True, return_inverse=True)
         # print("cls_unique:", cls_unique)
-
+        # print("masks:", masks.shape, "inverse_indices:", inverse_indices.shape)
+        # print("masks.dim()", masks.dim(), "inverse_indices.dim()", inverse_indices.dim())
+        # sys.exit()
+        # print("masks.ndim:", masks.ndim)
+        # print("cls_unique:", cls_unique)
+        # print("inverse_indices:", inverse_indices)
+        # sys.exit()
+        if masks.dim() == 0: # or inverse_indices.dim() == 0:
+            # 發現不能迭代，提早退出
+            return None, None
+        if inverse_indices.ndim == 0:
+            inverse_indices = inverse_indices.unsqueeze(0)
+        
         # 建立 [nc, H, W] 視覺遮罩（包含未出現的類別也會保留為全 0）
         if nc is not None:
             visuals = torch.zeros(nc, *masksz, dtype=masks.dtype)
