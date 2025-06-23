@@ -459,8 +459,8 @@ scratch:
 
 sav_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images1/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels1/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 

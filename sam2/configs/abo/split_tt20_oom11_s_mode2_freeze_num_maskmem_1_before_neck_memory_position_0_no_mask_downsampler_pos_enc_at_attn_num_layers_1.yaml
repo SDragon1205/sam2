@@ -457,10 +457,131 @@ scratch:
 #   multiplier: 1
 #   train_batch_size: 1
 
-sav_dataset_train:
+# sav_dataset_train:
+#   # PATHS to Dataset
+#   img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images/" # PATH to MOSE JPEGImages folder
+#   gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels/"  # PATH to MOSE Annotations folder
+#   multiplier: 1
+#   train_batch_size: 1
+
+sav_dataset_train1:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images1/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels1/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train2:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images2/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels2/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train3:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images3/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels3/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train4:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images4/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels4/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train5:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images5/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels5/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train6:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images6/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels6/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train7:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images7/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels7/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train8:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images8/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels8/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train9:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images9/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels9/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train10:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images10/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels10/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train11:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images11/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels11/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train12:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images12/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels12/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train13:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images13/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels13/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train14:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images14/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels14/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train15:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images15/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels15/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train16:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images16/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels16/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train17:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images17/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels17/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train18:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images18/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels18/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train19:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images19/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels19/"  # PATH to MOSE Annotations folder
+  multiplier: 1
+  train_batch_size: 1
+sav_dataset_train20:
+  # PATHS to Dataset
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images20/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels20/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
@@ -788,7 +909,27 @@ trainer:
       phases_per_epoch: ${scratch.phases_per_epoch} # Chunks a single epoch into smaller phases
       batch_sizes: # List of batch sizes corresponding to each dataset
       # - ${sa1b_dataset_train.train_batch_size} # Batch size of dataset 1
-      - ${sav_dataset_train.train_batch_size} # Batch size of dataset 2
+      - 1 #${sav_dataset_train.train_batch_size} # Batch size of dataset 2
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      - 1
+      
       datasets:
       # # SA1B as an example of an image dataset
       # - _target_: training.dataset.vos_dataset.VOSDataset_yolo
@@ -808,8 +949,8 @@ trainer:
         training: true
         video_dataset:
           _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
-          img_folder: ${sav_dataset_train.img_folder}
-          gt_folder: ${sav_dataset_train.gt_folder}
+          img_folder: ${sav_dataset_train1.img_folder}
+          gt_folder: ${sav_dataset_train1.gt_folder}
           # file_list_txt: ${path_to_train_filelist} # Optional
           # ann_every: 4
         sampler:
@@ -818,7 +959,293 @@ trainer:
           reverse_time_prob: 0 # probability to reverse video
           template_0: True
         transforms: ${vos_train.train_transforms}
-        multiplier: ${sav_dataset_train.multiplier}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train2.img_folder}
+          gt_folder: ${sav_dataset_train2.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train3.img_folder}
+          gt_folder: ${sav_dataset_train3.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train4.img_folder}
+          gt_folder: ${sav_dataset_train4.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train5.img_folder}
+          gt_folder: ${sav_dataset_train5.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train6.img_folder}
+          gt_folder: ${sav_dataset_train6.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train7.img_folder}
+          gt_folder: ${sav_dataset_train7.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train8.img_folder}
+          gt_folder: ${sav_dataset_train8.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train9.img_folder}
+          gt_folder: ${sav_dataset_train9.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train10.img_folder}
+          gt_folder: ${sav_dataset_train10.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train11.img_folder}
+          gt_folder: ${sav_dataset_train11.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train12.img_folder}
+          gt_folder: ${sav_dataset_train12.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train13.img_folder}
+          gt_folder: ${sav_dataset_train13.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train14.img_folder}
+          gt_folder: ${sav_dataset_train14.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train15.img_folder}
+          gt_folder: ${sav_dataset_train15.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train16.img_folder}
+          gt_folder: ${sav_dataset_train16.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train17.img_folder}
+          gt_folder: ${sav_dataset_train17.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train18.img_folder}
+          gt_folder: ${sav_dataset_train18.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train19.img_folder}
+          gt_folder: ${sav_dataset_train19.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+      - _target_: training.dataset.vos_dataset.VOSDataset_yolo
+        training: true
+        video_dataset:
+          _target_: training.dataset.vos_raw_dataset.ABO_Dataset_yolo
+          img_folder: ${sav_dataset_train20.img_folder}
+          gt_folder: ${sav_dataset_train20.gt_folder}
+          # file_list_txt: ${path_to_train_filelist} # Optional
+          # ann_every: 4
+        sampler:
+          _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
+          num_frames: ${scratch.train_num_frames} # Number of frames per video
+          reverse_time_prob: 0 # probability to reverse video
+          template_0: True
+        transforms: ${vos_train.train_transforms}
+        multiplier: 1
+       
       shuffle: True
       num_workers: ${scratch.num_train_workers}
       pin_memory: True

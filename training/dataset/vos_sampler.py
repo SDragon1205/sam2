@@ -105,7 +105,7 @@ class EvalSampler(VOSSampler):
         return SampledFramesAndObjects(frames=frames, object_ids=object_ids)
 
 ######################################################################################################
-
+import sys
 @dataclass
 class SampledFrames:
     frames: List[int]
@@ -117,18 +117,26 @@ class RandomUniformSampler_yolo(VOSSampler):
         # max_num_objects,
         reverse_time_prob=0.0,
         val: bool = False,
+        template_0: bool = False,
     ):
         self.num_frames = num_frames
         # self.max_num_objects = max_num_objects
         self.reverse_time_prob = reverse_time_prob
         self.val = val
+        self.template_0 = template_0
 
     def sample(self, video, epoch=None):
         if len(video.frames) < self.num_frames:
             raise Exception(
                 f"Cannot sample {self.num_frames} frames from video {video.video_name} as it only has {len(video.frames)} annotated frames."
             )
-        if self.val:
+        if self.template_0:
+            start = random.randrange(1, len(video.frames) - self.num_frames + 1)
+            frames = [video.frames[0]] + [video.frames[start + step] for step in range(self.num_frames-1)]
+            # print("frames:", frames)
+            # sys.exit()
+            return SampledFrames(frames=frames)
+        elif self.val:
             start = 0
         else:
             start = random.randrange(0, len(video.frames) - self.num_frames + 1)
@@ -137,5 +145,6 @@ class RandomUniformSampler_yolo(VOSSampler):
         if random.uniform(0, 1) < self.reverse_time_prob:
             # Reverse time
             frames = frames[::-1]
-
+        # print("frames:", frames)
+        # sys.exit()
         return SampledFrames(frames=frames)

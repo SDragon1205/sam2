@@ -686,12 +686,12 @@ class Trainer_yolo:
             if self.epoch > 0:
                 logging.info(f"Resuming training from epoch: {self.epoch}")
                 # resuming from a checkpoint
-                if self.is_intermediate_val_epoch(self.epoch - 1):
-                    logging.info("Running previous val epoch")
-                    self.epoch -= 1
-                    self.run_val()
-                    self.run_test()
-                    self.epoch += 1
+                # if self.is_intermediate_val_epoch(self.epoch - 1):
+                #     logging.info("Running previous val epoch")
+                #     self.epoch -= 1
+                #     self.run_val()
+                #     self.run_test()
+                #     self.epoch += 1
             # self.run_test()
             # print("#######################################################")
             # print("debug -3")
@@ -1281,7 +1281,25 @@ class Trainer_yolo:
                             progress_meter.val,
                             self.steps[phase],
                         )
-
+                # print("data_iter:", data_iter)
+                # print("self.logging_conf.log_scalar_frequency:", self.logging_conf.log_scalar_frequency)
+                if data_iter % 500 == 0:
+                    torch.cuda.empty_cache()
+                    del batch
+                    for name in list(locals()):
+                        if name not in ["self", "train_loader", "data_iter"]:
+                            trash = locals()[name]
+                            if isinstance(trash, torch.Tensor) or isinstance(trash, dict) or isinstance(trash, list):
+                                del trash
+                    gc.collect()
+            except RuntimeError as e:
+                if 'out of memory' in str(e):
+                    logging.warning(f"OOM on batch {data_iter}. Skipping batch...")
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    continue
+                else:
+                    raise e
             # Catching NaN/Inf errors in the loss
             # except Exception as e:
             #     print(f"[Warning] Backward pass failed due to: {e}. Skipping this batch.")
