@@ -1,0 +1,1 @@
+from .t2vdet import t2vdet_class

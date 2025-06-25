@@ -1,0 +1,4 @@
+#!/bin/bash
+
+python3 train/v2v_SAVPE/exp_testing_different_yolo/v9s_SAVPE_SigLIP2_FT_multi_layer_135_Object365_80k.py
+python3 validation/code/SAVPE_v2v/exp_testing_different_yolo/v9s_SAVPE_SigLIP2_FT_multi_layer_135_Object365_80k.py
