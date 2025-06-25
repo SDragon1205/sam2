@@ -59,6 +59,8 @@ from PIL import Image, ImageDraw, ImageFont
 from typing import List, Tuple, Union
 from torchvision.transforms.functional import to_pil_image
 from torchviz import make_dot
+import copy
+from omegaconf import OmegaConf
 
 def preprocess_img(img: torch.Tensor):
     """
@@ -268,6 +270,7 @@ class Trainer_yolo:
         loss: Optional[Dict[str, Any]] = None,
         validator: Dict[str, Any],
         freeze_yolo = False,
+        abo_train: int = 0,
     ):
 
         self._setup_env_variables(env_variables)
@@ -288,6 +291,7 @@ class Trainer_yolo:
         self.where = 0.0
         self.validator_conf = validator
         self.freeze_yolo = freeze_yolo
+        self.abo_train = abo_train
 
         self._infer_distributed_backend_if_none(distributed, accelerator)
 
@@ -719,8 +723,23 @@ class Trainer_yolo:
             # print("self.val_dataset:", self.val_dataset)
             # sys.exit()
         if self.mode in ["train", "train_only", "train2"]:
-            self.train_dataset = instantiate(self.data_conf.train)
-        
+            if getattr(self, "abo_train", 0) > 0:
+                self.train_dataset = []
+                for i in range(self.abo_train):
+                    train_conf = copy.deepcopy(self.data_conf.train)
+                    # print("train_conf.datasets[0].video_dataset.img_folder:", train_conf.datasets[0].video_dataset.img_folder)
+                    # print("train_conf.datasets[0].video_dataset.gt_folder:", train_conf.datasets[0].video_dataset.gt_folder)
+                    # Adjust the nested image/label folder paths
+                    train_conf.datasets[0].video_dataset.img_folder = \
+                        train_conf.datasets[0].video_dataset.img_folder.replace("images1", f"images{i+1}")
+                    train_conf.datasets[0].video_dataset.gt_folder = \
+                        train_conf.datasets[0].video_dataset.gt_folder.replace("labels1", f"labels{i+1}")
+                    # print("new train_conf.datasets[0].video_dataset.img_folder:", train_conf.datasets[0].video_dataset.img_folder)
+                    # print("new train_conf.datasets[0].video_dataset.gt_folder:", train_conf.datasets[0].video_dataset.gt_folder)
+                    self.train_dataset.append(instantiate(train_conf))
+            else:
+                self.train_dataset = instantiate(self.data_conf.train)
+        # sys.exit()
         if self.mode in ["train2", "test"]:
             self.test_dataset = instantiate(self.data_conf.get(Phase.TEST, None))
             # print(self.test_dataset)
@@ -734,7 +753,13 @@ class Trainer_yolo:
         # print("self.epoch:", self.epoch)
         # print("self.max_epochs:", self.max_epochs)
         while self.epoch < self.max_epochs:
-            dataloader = self.train_dataset.get_loader(epoch=int(self.epoch))
+            if getattr(self, "abo_train", 0) > 0:
+                dataset_index = self.epoch // self.abo_train
+                # print("self.epoch:", self.epoch, "self.abo_train:", self.abo_train, "dataset_index:", dataset_index)
+                # sys.exit()
+                dataloader = self.train_dataset[dataset_index].get_loader(epoch=int(self.epoch))
+            else:
+                dataloader = self.train_dataset.get_loader(epoch=int(self.epoch))
             barrier()
             outs = self.train_epoch(dataloader)
             self.logger.log_dict(outs, self.epoch)  # Logged only on rank 0

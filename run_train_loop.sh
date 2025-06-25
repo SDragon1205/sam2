@@ -6,7 +6,7 @@
 
 # === 1. 你要執行的指令 =========================
 CMD="python training/train.py \
-      -c configs/abo/1_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml \
+      -c configs/abo/20_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml \
       --use-cluster 0 \
       --num-gpus 1"
 

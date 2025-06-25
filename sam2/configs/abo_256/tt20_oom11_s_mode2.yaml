@@ -457,15 +457,15 @@ scratch:
 
 sav_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_256/train/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_256/train/labels/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
 sav_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/val/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/val/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_256/val/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_256/val/labels/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 

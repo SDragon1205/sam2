@@ -10,5 +10,10 @@ python training/train.py     -c configs/imagenet_vid/ --use-cluster 0 --num-gpus
 
 python training/train.py     -c configs/abo/ --use-cluster 0 --num-gpus 1
 
+python training/train.py     -c configs/abo_256/ --use-cluster 0 --num-gpus 1
+
+CUDA_VISIBLE_DEVICES=2
 
 tensorboard --logdir=tensorboard --port=6006 --bind_all
+
+python v2vdet/paidge_api/stream_v2vdet_SAVPE_11s_SigLIP2_base_OO.py

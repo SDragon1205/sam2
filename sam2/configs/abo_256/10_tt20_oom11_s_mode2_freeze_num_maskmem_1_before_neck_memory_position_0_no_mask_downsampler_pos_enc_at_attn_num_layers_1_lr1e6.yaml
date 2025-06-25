@@ -1,13 +1,16 @@
 # @package _global_
 
 scratch:
-  mode: val #test #val #train2 # train_only
+  mode: train2 #test #val #train2 # train_only
+  abo_train: 10
+  set_class_skip_first_frame_memory: True
+  freeze_yolo: True
   # frame_transform_rate: 2
   skip_n_frame: 2
   # select_frame: 0
   num_maskmem: 1
   temp_pos_enc: True
-  init_cond_frames_mode: 2
+  init_cond_frames_mode: 1
   self_memory_encode: True
   use_origin_yolo_outputs_encode: False
   memory_position: 0
@@ -21,10 +24,10 @@ scratch:
   resolution: 640
   # train_batch_size: 1
   num_train_workers: 6
-  train_num_frames: 20
+  train_num_frames: 3
   val_num_frames: 20
   max_num_objects: 3
-  base_lr: 5.0e-6
+  base_lr: 1.0e-6
   vision_lr: 3.0e-06
   phases_per_epoch: 1
   num_epochs: 150
@@ -457,15 +460,15 @@ scratch:
 
 sav_dataset_train:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/train/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_256/train/images1/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_256/train/labels1/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
 sav_dataset_val:
   # PATHS to Dataset
-  img_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/val/images/" # PATH to MOSE JPEGImages folder
-  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_train_100k/val/labels/"  # PATH to MOSE Annotations folder
+  img_folder: "/home/user/sdragon/ABO_dataset/ABO_256/val/images/" # PATH to MOSE JPEGImages folder
+  gt_folder: "/home/user/sdragon/ABO_dataset/ABO_256/val/labels/"  # PATH to MOSE Annotations folder
   multiplier: 1
   train_batch_size: 1
 
@@ -585,6 +588,8 @@ vos_val:
 trainer:
   _target_: training.trainer_yolo.Trainer_yolo
   mode: ${scratch.mode} #val # train_only
+  freeze_yolo: ${scratch.freeze_yolo}
+  abo_train: ${scratch.abo_train}
   max_epochs: ${times:${scratch.num_epochs},${scratch.phases_per_epoch}}
   accelerator: cuda
   seed_value: 123
@@ -766,6 +771,7 @@ trainer:
     skip_n_frame: ${scratch.skip_n_frame}
     # frame_transform_rate: ${scratch.frame_transform_rate}
     oo: True
+    set_class_skip_first_frame_memory: ${scratch.set_class_skip_first_frame_memory}
 
   validator:
     _target_: training.validator.maP50_Validator
@@ -812,6 +818,7 @@ trainer:
           _target_: training.dataset.vos_sampler.RandomUniformSampler_yolo
           num_frames: ${scratch.train_num_frames} # Number of frames per video
           reverse_time_prob: 0 # probability to reverse video
+          template_0: True
         transforms: ${vos_train.train_transforms}
         multiplier: ${sav_dataset_train.multiplier}
       shuffle: True
