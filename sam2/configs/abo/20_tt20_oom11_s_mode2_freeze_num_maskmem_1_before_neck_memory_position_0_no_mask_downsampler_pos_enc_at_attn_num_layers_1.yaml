@@ -935,7 +935,7 @@ trainer:
 
   optim:
     amp:
-      enabled: True
+      enabled: False
       amp_dtype: bfloat16
 
     optimizer:

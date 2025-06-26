@@ -1,0 +1,89 @@
+# ABO Object-Orientation dataset by EricTsai
+# Example usage: yolo train data=v2vdet_ultralytics/cfg/datasets/ABO_80.yaml
+
+path: ABO/v2v_dataset_100_classes # dataset root dir
+train: images/train # train images (relative to 'path') 100000 images
+val: images/val  # val images (relative to 'path') 5000 images
+
+# Classes
+names:
+  0: 4ab26d7b
+  1: 541f6ce4
+  2: 89c2d64f
+  3: 8d7d44e3
+  4: 891bb795
+  5: fe076634
+  6: b76b2312
+  7: 84e3704c
+  8: bff48f8d
+  9: 2d47bb73
+  10: ef1116cc
+  11: fd9f955e
+  12: 36ca42a5
+  13: ee9c441b
+  14: 5b3a0b93
+  15: b9765a0d
+  16: 8c779b83
+  17: 45bfeaf0
+  18: b312a681
+  19: 734f3775
+  20: 2490b893
+  21: 88b76465
+  22: 7c37c967
+  23: 6bdb647e
+  24: 00d2b5c7
+  25: b742771e
+  26: 3e65b2fc
+  27: c1a48f17
+  28: 1c24fe9c
+  29: 61c3fa32
+  30: 2ae3c1a5
+  31: 51c78bfa
+  32: 12a0f265
+  33: 80cf08c0
+  34: 0952e083
+  35: 6f0142ee
+  36: 90fa2193
+  37: a7c0e597
+  38: ca445017
+  39: 44c2ccad
+  40: 79a874b3
+  41: 0d409293
+  42: 4913e19c
+  43: 2cefc4fd
+  44: 6f7918a9
+  45: 655b931e
+  46: 7fadf3b3
+  47: af87514a
+  48: fb5fa3bd
+  49: 2cfde134
+  50: fd7c25b1
+  51: b62fcc7d
+  52: 527cc166
+  53: 65896443
+  54: 29bc65bf
+  55: 9ed1eb12
+  56: 478d6021
+  57: 2b1e22ec
+  58: 2f7aa776
+  59: 0a9921fa
+  60: b621d838
+  61: 6a127756
+  62: 1d8e70ef
+  63: 77db6a85
+  64: c80fc9ca
+  65: 2a7e734b
+  66: 8440ad53
+  67: 83ff42f5
+  68: 98bfb3ac
+  69: e45a0332
+  70: a196d4d0
+  71: aeea7e89
+  72: d52bfd87
+  73: 01f0df37
+  74: 2dde393e
+  75: 16007944
+  76: 71471408
+  77: 07376580
+  78: 3bf0b550
+  79: 083259a2

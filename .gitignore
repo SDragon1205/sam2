@@ -19,7 +19,6 @@ new_ultralytics/
 old_ultralytics/
 
 set_class/
-v2vdet_ultralytics
 query_img.jpg
 result.json
 yolov8m-world.pt

@@ -1,0 +1,1 @@
+from v2vdet.train import *

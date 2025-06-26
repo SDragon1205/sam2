@@ -1,5 +1,5 @@
 # from ultralytics import YOLOWorld
-
+# /DATA2/miniforge3/envs/oom/lib/python3.10/site-packages/ultralytics/
 import os, sys
 sys.path.insert(0, "/home/user/sdragon/sam2")
 from pathlib import Path
@@ -25,6 +25,7 @@ import pickle
 # from ultralytics import YOLOE
 # from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor, YOLOEVPDetectPredictor
 from copy import deepcopy
+import sys
 
 from v2vdet.v2vdet_ultralytics.models.v2vdet.model import V2V_With_MultiScale_SAVPE_SigLIP2_B_ObjectOriented as MODEL
 
@@ -63,17 +64,21 @@ class v2vdet_class():
         self.model.info()
         self.model._load(CKPT_NAME, task='detect')
         self.model.training=False
+        print("self.model:", self.model)
+        print("self.model.model:", self.model.model)
 
         self.initialize_model()
 
     @torch.inference_mode()
     def set_classes_multi_view(self, query_img: [str], query_class_name: [str]):
+        print("set_classes_multi_view")
         # Filter images with "frame" in filename and corresponding mask
         valid_query_img = []
         valid_class_name = []
         bboxes_list = []
         
         for img_path, class_name in zip(query_img, query_class_name):
+            print("img_path:", img_path)
             # Skip if "frame" is not in the filename
             if "frame" not in img_path.lower():
                 logging.debug(f"Skipping image without 'frame': {img_path}")
@@ -178,53 +183,58 @@ class v2vdet_class():
     #     bboxes = torch.tensor(bboxes_list)
     #     self.model.model.inference_set_classes(self.query_img_emb, bboxes)
 
-    @torch.inference_mode()
-    def set_classes(self, query_img: [str], query_class_name: [str]):
-        self.query_img = query_img
-        self.query_img_emb = [Image.open(img).convert(mode="RGB") for img in self.query_img]
+    # @torch.inference_mode()
+    # def set_classes(self, query_img: [str], query_class_name: [str]):
+    #     print("set_classes")
+    #     self.query_img = query_img
+    #     self.query_img_emb = [Image.open(img).convert(mode="RGB") for img in self.query_img]
         
-        nc = len(query_class_name)
+    #     nc = len(query_class_name)
         
-        # Load corresponding mask files and convert to bounding boxes
-        bboxes_list = []
-        for img_path in query_img:
-            # Replace "frame" with "mask" in the filename to get the mask path
-            mask_path = img_path.replace("frame", "mask")
-            if not Path(mask_path).is_file():
-                raise FileNotFoundError(f"Mask file not found: {mask_path}")
-            # Load mask as a binary numpy array
+    #     # Load corresponding mask files and convert to bounding boxes
+    #     bboxes_list = []
+    #     for img_path in query_img:
+    #         # Replace "frame" with "mask" in the filename to get the mask path
+    #         mask_path = img_path.replace("frame", "mask")
+    #         if not Path(mask_path).is_file():
+    #             raise FileNotFoundError(f"Mask file not found: {mask_path}")
+    #         # Load mask as a binary numpy array
 
 
-            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-            mask = (mask > 0).astype(np.uint8)  # Convert to binary (0 or 1)
+    #         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    #         mask = (mask > 0).astype(np.uint8)  # Convert to binary (0 or 1)
             
-            # Find contours to compute bounding box
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours:
-                # If no contours, use a default bounding box (e.g., full image)
-                bbox = [0, 0, mask.shape[1], mask.shape[0]]
-            else:
-                # Get the bounding box of the largest contour
-                x, y, w, h = cv2.boundingRect(contours[0])
-                for contour in contours[1:]:
-                    x_temp, y_temp, w_temp, h_temp = cv2.boundingRect(contour)
-                    if w_temp * h_temp > w * h:
-                        x, y, w, h = x_temp, y_temp, w_temp, h_temp
-                #bbox = [(x+w)//2, (y+h)//2, w, h]  # [x_center, y_center, width, height]
-                bbox = [x, y, w, h] # [x_top_left_corner, y_top_left_corner, width, height]
+    #         # Find contours to compute bounding box
+    #         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    #         if not contours:
+    #             # If no contours, use a default bounding box (e.g., full image)
+    #             bbox = [0, 0, mask.shape[1], mask.shape[0]]
+    #         else:
+    #             # Get the bounding box of the largest contour
+    #             x, y, w, h = cv2.boundingRect(contours[0])
+    #             for contour in contours[1:]:
+    #                 x_temp, y_temp, w_temp, h_temp = cv2.boundingRect(contour)
+    #                 if w_temp * h_temp > w * h:
+    #                     x, y, w, h = x_temp, y_temp, w_temp, h_temp
+    #             #bbox = [(x+w)//2, (y+h)//2, w, h]  # [x_center, y_center, width, height]
+    #             bbox = [x, y, w, h] # [x_top_left_corner, y_top_left_corner, width, height]
             
-            bboxes_list.append(bbox)
+    #         bboxes_list.append(bbox)
         
-        bboxes = torch.tensor(bboxes_list)
-        self.model.model.inference_set_classes(self.query_img_emb, bboxes)
+    #     bboxes = torch.tensor(bboxes_list)
+    #     self.model.model.inference_set_classes(self.query_img_emb, bboxes)
       
     @torch.inference_mode()
     def initialize_model(self):
-        self.model.predict(np.zeros((384, 640, 3), dtype=np.uint8))
+        # self.model.predict(np.zeros((384, 640, 3), dtype=np.uint8))
+        self.model.predict(np.zeros((640, 640, 3), dtype=np.uint8))
     
     @torch.inference_mode()
     def predict(self, BytesIO_Obj: BytesIO, save_json=False, json_name='result.json'):
+        print("predict")
+        # print("BytesIO_Obj:", BytesIO_Obj)
         pil_image = Image.open(BytesIO_Obj)
+        print("PIL size (W, H):", pil_image.size)
         # pil_image.save('query_img.jpg')
         
         results = self.model(pil_image,
@@ -235,13 +245,16 @@ class v2vdet_class():
 
         pil_image.save('query_img.jpg')
         bboxes = results[0].boxes.xyxyn.to('cpu').numpy().tolist()
+        print("bboxes:", bboxes)
         centers = [[(x1 + x2) / 2, (y1 + y2) / 2] for x1, y1, x2, y2 in bboxes]
+        print("centers:", centers)
         # print('cls', results[0].boxes.cls.to('cpu').numpy().tolist())
         # Extract class indices and convert to list
         class_indices = results[0].boxes.cls.to('cpu').numpy().tolist()
         
         # Map class indices to class names using self.names
         class_names = [self.model.names[int(c)] for c in class_indices]
+        print("self.model.names:", self.model.names)
         # print('class_names', class_names)
     
         result_dict = {

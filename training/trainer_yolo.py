@@ -1323,6 +1323,7 @@ class Trainer_yolo:
                     torch.cuda.empty_cache()
                     gc.collect()
                     continue
+                # elif: 
                 else:
                     raise e
             # Catching NaN/Inf errors in the loss
@@ -1588,6 +1589,9 @@ class Trainer_yolo:
         self.logger = Logger(self.logging_conf)
 
         self.model = instantiate(self.model_conf, _convert_="all")
+        print("self.model:", self.model)
+        print("self.model_conf:", self.model_conf)
+        sys.exit()
         print_model_summary(self.model)
 
         self.loss = None
