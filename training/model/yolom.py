@@ -277,89 +277,104 @@ class YOLOMTrain(YOLOMBase):
         #     for p in self.image_encoder.parameters():
         #         p.requires_grad = False
 
-    def forward(self, input: BatchedVideoDatapoint_yolo):
-        # if self.training or not self.forward_backbone_per_frame_for_eval:
-        #     # precompute image features on all frames before tracking
-        #     # print("input.flat_img_batch.shape", input.flat_img_batch.shape)
-        #     # sys.exit()
-        #     backbone_out = self.forward_image(input.flat_img_batch)
-        # else:
-        #     # defer image feature computation on a frame until it's being tracked
-        #     backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
+    # def forward(self, input: BatchedVideoDatapoint_yolo):
+    def forward(self, input, **kwargs):
+        if isinstance(input, BatchedVideoDatapoint_yolo):
+            # if self.training or not self.forward_backbone_per_frame_for_eval:
+            #     # precompute image features on all frames before tracking
+            #     # print("input.flat_img_batch.shape", input.flat_img_batch.shape)
+            #     # sys.exit()
+            #     backbone_out = self.forward_image(input.flat_img_batch)
+            # else:
+            #     # defer image feature computation on a frame until it's being tracked
+            #     backbone_out = {"backbone_fpn": None, "vision_pos_enc": None}
 
-        # total_params_yolo = sum(p.numel() for p in self.yolo.parameters())
-        # print(f"Total yolo parameters: {total_params_yolo}")
-        # total_params_memory_encoder = sum(p.numel() for p in self.memory_encoder.parameters())
-        # print(f"Total memory_encoder parameters: {total_params_memory_encoder}")
-        # total_params_memory_attention = sum(p.numel() for p in self.memory_attention.parameters())
-        # print(f"Total memory_attention parameters: {total_params_memory_attention}")
+            # total_params_yolo = sum(p.numel() for p in self.yolo.parameters())
+            # print(f"Total yolo parameters: {total_params_yolo}")
+            # total_params_memory_encoder = sum(p.numel() for p in self.memory_encoder.parameters())
+            # print(f"Total memory_encoder parameters: {total_params_memory_encoder}")
+            # total_params_memory_attention = sum(p.numel() for p in self.memory_attention.parameters())
+            # print(f"Total memory_attention parameters: {total_params_memory_attention}")
 
-        # for name, param in self.yolo.named_parameters():
-        #     print(f"yolo, {name}: {param.shape}")
-        # for name, param in self.memory_encoder.named_parameters():
-        #     print(f"memory_encoder, {name}: {param.shape}")
-        # for name, param in self.memory_attention.named_parameters():
-        #     print(f"memory_attention, {name}: {param.shape}")
-        # sys.exit()
-        # print("input.flat_img_batch:", input.flat_img_batch.shape)
-        # print("max:", torch.max(input.flat_img_batch))
-        # print("min:", torch.min(input.flat_img_batch))
-        # print("input.flat_img_batch:", input.flat_img_batch)
-        # print("torch.ones_like(input.flat_img_batch):", torch.ones_like(input.flat_img_batch))
-        # sys.exit()
-        occluded_feats = None
-        if self.current_frame_occluded_all:
-            occluded_feats = self.forward_image(torch.ones_like(input.flat_img_batch))
-        # print("occluded_feats:", occluded_feats)
-        # flat_img_batch_clone = input.flat_img_batch.clone()
-        backbone_out = self.forward_image(input.flat_img_batch, input.gtdata)
-        # visualize_batched_video(batched_video=input)
-        # sys.exit()
-        # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][0][0][0])
-        # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0].shape)
-        # print("torch.equal(flat_img_batch_clone, input.flat_img_batch):", torch.equal(flat_img_batch_clone, input.flat_img_batch))
-        if self.current_frame_transform or self.frame_transform_rate != 0:
-            # # print("input.flat_img_batch:", input.flat_img_batch.shape)
-            # # print("input.img_batch:", input.img_batch.shape)
-            # input_blurred = input.copy()
-            # input_blurred.img_batch = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate).reshape(input.img_batch.shape)
-            # print("input_blurred.img_batch:", input_blurred.img_batch.shape)
-            # visualize_batched_video(input)
-            # visualize_batched_video(input_blurred, folder="tmp_trans")
+            # for name, param in self.yolo.named_parameters():
+            #     print(f"yolo, {name}: {param.shape}")
+            # for name, param in self.memory_encoder.named_parameters():
+            #     print(f"memory_encoder, {name}: {param.shape}")
+            # for name, param in self.memory_attention.named_parameters():
+            #     print(f"memory_attention, {name}: {param.shape}")
             # sys.exit()
-            img_batch_blurred = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate)
-            occluded_feats = self.forward_image(img_batch_blurred)
-            # print("occluded_feats:", occluded_feats["backbone_fpn"][0][0][0][0])
-            # print("occluded_feats:", occluded_feats["backbone_fpn"][0].shape)
-            # print("backbone_out_trans[vision_pos_enc][0]:", backbone_out_trans["vision_pos_enc"][0].shape)
-            # print("backbone_out_trans[vision_pos_enc] == backbone_out[vision_pos_enc]", torch.equal(backbone_out_trans["vision_pos_enc"][0],backbone_out["vision_pos_enc"][0]))
-            # backbone_out["backbone_fpn_trans"] = backbone_out_trans["backbone_fpn"]
+            # print("input.flat_img_batch:", input.flat_img_batch.shape)
+            # print("max:", torch.max(input.flat_img_batch))
+            # print("min:", torch.min(input.flat_img_batch))
+            # print("input.flat_img_batch:", input.flat_img_batch)
+            # print("torch.ones_like(input.flat_img_batch):", torch.ones_like(input.flat_img_batch))
+            # sys.exit()
+            occluded_feats = None
+            if self.current_frame_occluded_all:
+                occluded_feats = self.forward_image(torch.ones_like(input.flat_img_batch))
+            # print("occluded_feats:", occluded_feats)
+            # flat_img_batch_clone = input.flat_img_batch.clone()
+            backbone_out = self.forward_image(input.flat_img_batch, input.gtdata)
+            # visualize_batched_video(batched_video=input)
+            # sys.exit()
+            # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][0][0][0])
+            # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0].shape)
+            # print("torch.equal(flat_img_batch_clone, input.flat_img_batch):", torch.equal(flat_img_batch_clone, input.flat_img_batch))
+            if self.current_frame_transform or self.frame_transform_rate != 0:
+                # # print("input.flat_img_batch:", input.flat_img_batch.shape)
+                # # print("input.img_batch:", input.img_batch.shape)
+                # input_blurred = input.copy()
+                # input_blurred.img_batch = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate).reshape(input.img_batch.shape)
+                # print("input_blurred.img_batch:", input_blurred.img_batch.shape)
+                # visualize_batched_video(input)
+                # visualize_batched_video(input_blurred, folder="tmp_trans")
+                # sys.exit()
+                img_batch_blurred = gaussian_blur_batch(input.flat_img_batch, kernel_size=17, sigma=10.0, frame_transform_rate=self.frame_transform_rate)
+                occluded_feats = self.forward_image(img_batch_blurred)
+                # print("occluded_feats:", occluded_feats["backbone_fpn"][0][0][0][0])
+                # print("occluded_feats:", occluded_feats["backbone_fpn"][0].shape)
+                # print("backbone_out_trans[vision_pos_enc][0]:", backbone_out_trans["vision_pos_enc"][0].shape)
+                # print("backbone_out_trans[vision_pos_enc] == backbone_out[vision_pos_enc]", torch.equal(backbone_out_trans["vision_pos_enc"][0],backbone_out["vision_pos_enc"][0]))
+                # backbone_out["backbone_fpn_trans"] = backbone_out_trans["backbone_fpn"]
 
-        backbone_out = self.prepare_prompt_inputs(backbone_out, input)
-        previous_stages_out = self.forward_tracking(backbone_out, input, occluded_feats=occluded_feats)
-        # previous_stages_out = self._forward_yolo_neck_heads(backbone_out["backbone_fpn"])
-        # previous_stages_out = self.yolo.detection_model._predict_once(input.flat_img_batch)
+            backbone_out = self.prepare_prompt_inputs(backbone_out, input)
+            previous_stages_out = self.forward_tracking(backbone_out, input, occluded_feats=occluded_feats)
+            # previous_stages_out = self._forward_yolo_neck_heads(backbone_out["backbone_fpn"])
+            # previous_stages_out = self.yolo.detection_model._predict_once(input.flat_img_batch)
 
-        # model = YOLO("/home/si2/sdragon/sam2/checkpoints/yolov8s.pt")
-        # img_tensor = input.flat_img_batch
-        # img_tensor = img_tensor.to(torch.float32)
-        # previous_stages_out = model.model._predict_once(img_tensor)
+            # model = YOLO("/home/si2/sdragon/sam2/checkpoints/yolov8s.pt")
+            # img_tensor = input.flat_img_batch
+            # img_tensor = img_tensor.to(torch.float32)
+            # previous_stages_out = model.model._predict_once(img_tensor)
 
-        # results = model(input.flat_img_batch)
+            # results = model(input.flat_img_batch)
 
-        # for i, r in enumerate(results):
-        #     # Plot results image
-        #     im_bgr = r.plot()  # BGR-order numpy array
-        #     im_rgb = Image.fromarray(im_bgr[..., ::-1])  # RGB-order PIL image
+            # for i, r in enumerate(results):
+            #     # Plot results image
+            #     im_bgr = r.plot()  # BGR-order numpy array
+            #     im_rgb = Image.fromarray(im_bgr[..., ::-1])  # RGB-order PIL image
 
-        #     # Show results to screen (in supported environments)
-        #     r.show()
+            #     # Show results to screen (in supported environments)
+            #     r.show()
 
-        #     # Save results to disk
-        #     r.save(filename=f"tmp/results{i}.jpg")
-        # sys.exit()
-        return previous_stages_out
-
+            #     # Save results to disk
+            #     r.save(filename=f"tmp/results{i}.jpg")
+            # sys.exit()
+            return previous_stages_out
+        else:
+            print("self.yolo.detection_model.model[-1].no:", self.yolo.detection_model.model[-1].no)
+            print("self.yolo.detection_model.model[-1].nc:", self.yolo.detection_model.model[-1].nc)
+            print("self.yolo.detection_model.model[-1].reg_max:", self.yolo.detection_model.model[-1].reg_max)
+            print("self.yolo.detection_model.vpe.shape:", self.yolo.detection_model.vpe.shape)
+            self.yolo.detection_model.model[-1].no = self.yolo.detection_model.model[-1].nc + self.yolo.detection_model.model[-1].reg_max * 4
+            print("self.yolo.detection_model.model[-1].no:", self.yolo.detection_model.model[-1].no)
+            if self.init_cond_frames_mode == 2:
+                backbone_out = self.yolo.forward_backbone_oo(input)
+                x = self.yolo.forward_neck_head_oo(backbone_out["backbone_fpn"])
+            else:
+                print("Not implement!")
+                sys.exit()
+            return x
     # def _prepare_backbone_features_per_frame(self, img_batch, img_ids):
     #     """Compute the image backbone features on the fly for the given img_ids."""
     #     # Only forward backbone on unique image ids to avoid repetitive computation

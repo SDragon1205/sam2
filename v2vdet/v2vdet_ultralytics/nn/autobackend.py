@@ -681,8 +681,19 @@ class v2v_with_SAVPE_AutoBackend(AutoBackend):
         # print("self.rknn:", self.rknn)
         # PyTorch
         if self.pt or self.nn_module:
+            print("im:", im.shape)
+            print("batch:", batch)
+            print("augment:", augment)
+            print("visualize:", visualize)
+            print("embed:", embed)
+            print("kwargs:", kwargs)
             y = self.model(im, batch=batch, augment=augment, visualize=visualize, embed=embed, **kwargs)
-
+            # print("y:", y)
+            # print("len(y):", len(y))
+            # print("len(y[0]):", len(y[0]))
+            # print("len(y[1]):", len(y[1]))
+            print("y[0].shape:", y[0].shape)
+            print("y[1].shape:", y[1][0].shape, y[1][1].shape, y[1][2].shape)
         # TorchScript
         elif self.jit:
             y = self.model(im)

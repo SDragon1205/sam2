@@ -166,7 +166,8 @@ class v2v_WITH_SAVPE_DetectionPredictor(DetectionPredictor):
 
   def setup_model(self, model, verbose=True):
     # """Initialize YOLO model with given parameters and set it to evaluation mode."""
-
+    print("v2v_WITH_SAVPE_DetectionPredictor setup_model")
+    print("model:", model)
     self.model = v2v_with_SAVPE_AutoBackend(
         weights=model or self.args.model,
         device=select_device(self.args.device, verbose=verbose),

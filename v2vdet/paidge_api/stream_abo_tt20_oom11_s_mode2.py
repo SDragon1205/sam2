@@ -26,8 +26,8 @@ import pickle
 # from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor, YOLOEVPDetectPredictor
 from copy import deepcopy
 
-# from v2vdet.v2vdet_ultralytics.models.v2vdet.model import V2V_With_MultiScale_SAVPE_SigLIP2_B_ObjectOriented as MODEL
-from training.model.yolom import YOLOMTrain as MODEL
+from v2vdet.v2vdet_ultralytics.models.v2vdet.model import V2V_With_MultiScale_SAVPE_SigLIP2_B_ObjectOriented as MODEL
+# from training.model.yolom import YOLOMTrain as MODEL
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
 from hydra import initialize_config_dir, compose
@@ -51,26 +51,39 @@ db_pool = ThreadedConnectionPool(
     database=DB_NAME
 )
 
-# scale='s'
-# MODEL_YAML = f"v2vdet_ultralytics/cfg/models/v2v/11/yolo11{scale}-v2v-multiscale_1_3_5.yaml"
+scale='s'
+MODEL_YAML1 = f"/DATA3/erictsai/v2vdet/v2vdet_ultralytics/cfg/models/v2v/11/yolo11{scale}-v2v-multiscale_1_3_5.yaml"
 # MODEL_YAML = f"/home/user/sdragon/sam2/sam2/configs/abo/tt20_oom11_s_mode2.yaml"
-cfg_path="/home/user/sdragon/sam2/sam2/configs/abo/"
-config_name="tt20_oom11_s_mode2.yaml"
+# cfg_path="/home/user/sdragon/sam2/sam2/configs/abo/"
+# config_name="stream_tt20_oom11_s_mode2.yaml"
+MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/stream_tt20_oom11_s_mode2.yaml"
 # CKPT_NAME = 'ckpt/v11m_SAVPE_SigLIP2_FT_multi_layer_135_Object365.pt'
 # CKPT_NAME = 'ckpt/OO_v11m_SAVPE_SigLIP2_FT_multi_layer_135_Object365.pt'
-# CKPT_NAME = '/DATA3/erictsai/v2vdet/v2v_training_result/from_H100/SigLIP2_series/OO_v11s_SAVPE_SigLIP2_FT_multi_layer_135/weights/best.pt'
-CKPT_NAME = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
+CKPT_NAME1 = '/DATA3/erictsai/v2vdet/v2v_training_result/from_H100/SigLIP2_series/OO_v11s_SAVPE_SigLIP2_FT_multi_layer_135/weights/best.pt'
+CKPT_NAME2 = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
 
-def load_model_from_config(cfg_path, config_name):
-    from hydra.core.global_hydra import GlobalHydra
-    if GlobalHydra.instance().is_initialized():
-        GlobalHydra.instance().clear()
+# def load_model_from_config(cfg_path, config_name):
+#     from hydra.core.global_hydra import GlobalHydra
+#     if GlobalHydra.instance().is_initialized():
+#         GlobalHydra.instance().clear()
 
-    with initialize_config_dir(config_dir=cfg_path, version_base="1.2"):
-        cfg = compose(config_name=config_name)
+#     with initialize_config_dir(config_dir=cfg_path, version_base="1.2"):
+#         cfg = compose(config_name=config_name)
+#     model_cfg = OmegaConf.to_container(cfg.trainer.model, resolve=True)
+#     print("model_cfg:", model_cfg)
+#     return instantiate(model_cfg, _convert_="all")
+def load_model_from_config(MODEL_YAML2, CKPT_NAME2):
+    from omegaconf import OmegaConf
+    from hydra.utils import instantiate
+    from hydra import compose
+    from sam2.build_sam import _load_checkpoint
+    # config_file = "/home/user/sdragon/sam2/sam2/configs/abo/tt20_oom11_s_mode2.yaml"
+    cfg = OmegaConf.load(MODEL_YAML2)
     model_cfg = OmegaConf.to_container(cfg.trainer.model, resolve=True)
-    print("model_cfg:", model_cfg)
-    return instantiate(model_cfg, _convert_="all")
+    model2 = instantiate(model_cfg, _convert_="all")
+    # print("model2:", model2)
+    _load_checkpoint(model2, CKPT_NAME2)
+    return model2
 # model = load_model_from_config(cfg_path, config_name)
 # print("model:", model)
 
@@ -80,13 +93,14 @@ class v2vdet_class():
         logging.basicConfig(level=logging.DEBUG, format=FORMAT)
         
         # Initialize model
-        # self.model = MODEL(MODEL_YAML)
-        # self.model.info()
-        # self.model._load(CKPT_NAME, task='detect')
+        self.model = MODEL(MODEL_YAML1)
+        self.model.info()
+        self.model._load(CKPT_NAME1, task='detect')
         # self.model.training=False
 
-        # self.initialize_model()
-        self.model = load_model_from_config(cfg_path, config_name)
+        self.model.model = load_model_from_config(MODEL_YAML2, CKPT_NAME2)
+        self.model.training=False
+        self.initialize_model()
 
     @torch.inference_mode()
     def set_classes_multi_view(self, query_img: [str], query_class_name: [str]):
@@ -145,7 +159,7 @@ class v2vdet_class():
         self.query_img_emb = [Image.open(img).convert(mode="RGB") for img in self.query_img]
         
         bboxes = torch.tensor(bboxes_list)
-        self.model.yolo.detection_model.multi_view_inference_set_classes(self.query_img_emb, bboxes, valid_class_name)
+        self.model.model.yolo.detection_model.multi_view_inference_set_classes(self.query_img_emb, bboxes, valid_class_name)
 
 
     # @torch.inference_mode()
@@ -242,7 +256,7 @@ class v2vdet_class():
       
     @torch.inference_mode()
     def initialize_model(self):
-        self.model.predict(np.zeros((384, 640, 3), dtype=np.uint8))
+        self.model.predict(np.zeros((640, 640, 3), dtype=np.uint8))
     
     @torch.inference_mode()
     def predict(self, BytesIO_Obj: BytesIO, save_json=False, json_name='result.json'):
