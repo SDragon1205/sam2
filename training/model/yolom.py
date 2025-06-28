@@ -362,12 +362,6 @@ class YOLOMTrain(YOLOMBase):
             # sys.exit()
             return previous_stages_out
         else:
-            print("self.yolo.detection_model.model[-1].no:", self.yolo.detection_model.model[-1].no)
-            print("self.yolo.detection_model.model[-1].nc:", self.yolo.detection_model.model[-1].nc)
-            print("self.yolo.detection_model.model[-1].reg_max:", self.yolo.detection_model.model[-1].reg_max)
-            print("self.yolo.detection_model.vpe.shape:", self.yolo.detection_model.vpe.shape)
-            self.yolo.detection_model.model[-1].no = self.yolo.detection_model.model[-1].nc + self.yolo.detection_model.model[-1].reg_max * 4
-            print("self.yolo.detection_model.model[-1].no:", self.yolo.detection_model.model[-1].no)
             if self.init_cond_frames_mode == 2:
                 backbone_out = self.yolo.forward_backbone_oo(input)
                 x = self.yolo.forward_neck_head_oo(backbone_out["backbone_fpn"])
