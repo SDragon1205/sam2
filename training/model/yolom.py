@@ -362,12 +362,16 @@ class YOLOMTrain(YOLOMBase):
             # sys.exit()
             return previous_stages_out
         else:
-            if self.init_cond_frames_mode == 2:
-                backbone_out = self.yolo.forward_backbone_oo(input)
-                x = self.yolo.forward_neck_head_oo(backbone_out["backbone_fpn"])
+            backbone_out = self.yolo.forward_backbone_oo(input)
+            if self.init_cond_frames_mode == 1:
+                backbone_out_mem = self.forward_mem(backbone_out)
+            elif self.init_cond_frames_mode == 2:
+                backbone_out_mem = backbone_out
             else:
                 print("Not implement!")
                 sys.exit()
+            # print("self.yolo.training:", self.yolo.training)
+            x = self.yolo.forward_neck_head_oo(backbone_out_mem["backbone_fpn"])
             return x
     # def _prepare_backbone_features_per_frame(self, img_batch, img_ids):
     #     """Compute the image backbone features on the fly for the given img_ids."""
@@ -840,6 +844,8 @@ class YOLOMTrain(YOLOMBase):
                 feat_sizes,
                 vision_feats_occluded,
             ) = self._prepare_backbone_features(backbone_out, occluded_feats)
+            # print("vision_feats:", len(vision_feats), vision_feats[0].shape, vision_feats[1].shape, vision_feats[2].shape)
+            # print("vision_pos_embeds:", len(vision_pos_embeds), vision_pos_embeds[0].shape, vision_pos_embeds[1].shape, vision_pos_embeds[2].shape)
 
         # Starting the stage loop
         num_frames = backbone_out["num_frames"]
@@ -879,14 +885,15 @@ class YOLOMTrain(YOLOMBase):
         # ]
         # print("init_cond_frames:", init_cond_frames)
         for stage_id in processing_order:
-            # print("==================================================================")
-            # print("stage_id:", stage_id)
+            print("==================================================================")
+            print("stage_id:", stage_id)
             # print("backbone_out[backbone_fpn]:", backbone_out["backbone_fpn"][0][stage_id][0][0][0])
             # print("occluded_feats:", occluded_feats["backbone_fpn"][0][stage_id][0][0][0])
             # print("txt_feats[stage_id].unsqueeze(0):", txt_feats[stage_id].unsqueeze(0).shape)
             # Get the image features for the current frames
             # img_ids = input.find_inputs[stage_id].img_ids
             img_ids = input.flat_obj_to_img_idx[stage_id]
+            print("img_ids:", img_ids)
 
             init_cond_frames_gt = None
             if (stage_id == 0 and self.use_gt_in_first_frame) or self.use_gt_in_all_frame:
@@ -899,8 +906,9 @@ class YOLOMTrain(YOLOMBase):
                 current_vision_feats = [x[:, img_ids] for x in vision_feats]
                 if self.trace_gradient and stage_id == 0:
                     first_backbone_feature = current_vision_feats[0]
-                # print("current_vision_feats:", current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
+                print("current_vision_feats:", len(current_vision_feats), current_vision_feats[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
+                print("current_vision_pos_embeds:", len(current_vision_pos_embeds), current_vision_pos_embeds[0].shape, current_vision_feats[0][0][0][0])
                 current_vision_feats_occluded = None
                 if self.current_frame_occluded_all or self.current_frame_transform or self.frame_transform_rate != 0:
                     current_vision_feats_occluded = [x[:, img_ids] for x in vision_feats_occluded]
@@ -1028,7 +1036,7 @@ class YOLOMTrain(YOLOMBase):
         # all_frame_outputs = [
         #     {k: v for k, v in d.items() if k != "obj_ptr"} for d in all_frame_outputs
         # ]
-        # sys.exit()
+        sys.exit()
         # print("before input.gtdata:", input.gtdata)
         # print("all_frame_outputs[0]:", all_frame_outputs[0].shape)
         # print("all_frame_outputs[1]:", all_frame_outputs[1][0].shape, all_frame_outputs[1][1].shape, all_frame_outputs[1][2].shape)

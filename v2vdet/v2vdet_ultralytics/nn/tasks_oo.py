@@ -1034,6 +1034,10 @@ class V2V_With_MultiScale_SAVPE_ObjectOriented_Model(DetectionModel):
     def predict(
         self, x, batch=None, profile=False, visualize=False, augment=False, embed=None, vpe=None
     ):
+        if x.dtype == torch.float16:
+            print("input 是 Half Precision")
+        elif x.dtype == torch.float32:
+            print("input 是 Float32")
         """
         Perform a forward pass through the model.
 

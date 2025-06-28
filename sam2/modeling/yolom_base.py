@@ -9,7 +9,7 @@ import torch.distributed
 import torch.nn.functional as F
 
 from torch.nn.init import trunc_normal_
-
+from collections import deque
 from sam2.modeling.sam.mask_decoder import MaskDecoder
 from sam2.modeling.sam.detection_head import Detection_head
 from sam2.modeling.backbones.yolo import yolo
@@ -325,6 +325,7 @@ class YOLOMBase(torch.nn.Module):
                 p.requires_grad_(False)
         self.oo = oo
         self.set_class_skip_first_frame_memory = set_class_skip_first_frame_memory
+        self.memory_bank = None
         
     @property
     def device(self):
@@ -944,6 +945,8 @@ class YOLOMBase(torch.nn.Module):
                 # Temporal positional encoding
                 if self.temp_pos_enc:  
                     # print(f"{t_pos}, self.temp_pos_enc:", self.num_maskmem - t_pos - 1)
+                    print("maskmem_enc:", maskmem_enc.shape)
+                    print("self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]:", self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1].shape)
                     maskmem_enc = (
                         maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                     )
@@ -1129,6 +1132,12 @@ class YOLOMBase(torch.nn.Module):
             curr=[current_out['maskmem_features'].permute(0, 2, 3, 1).reshape(-1, 1, self.hidden_dim)]
         else:
             curr=current_vision_feats
+        print("curr", len(curr), curr[0].shape)
+        print("curr_pos", len(curr_pos), curr_pos[0].shape)
+        print("memory", memory.shape)
+        print("memory_pos_embed", memory_pos_embed.shape)
+        print("num_obj_ptr_tokens", num_obj_ptr_tokens)
+        print("curr_mem", curr_mem)
         pix_feat_with_mem, atten_mem = self.memory_attention(
             curr=curr,
             curr_pos=curr_pos,
@@ -1137,6 +1146,8 @@ class YOLOMBase(torch.nn.Module):
             num_obj_ptr_tokens=num_obj_ptr_tokens,
             curr_mem=curr_mem,
         )
+        # print("pix_feat_with_mem:", pix_feat_with_mem.shape)
+        # print("atten_mem:", atten_mem.shape)
         # print("current_out_maskmem_features:", torch.equal(current_out_maskmem_features, current_out['maskmem_features']))
         # reshape the output (HW)BC => BCHW
         pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
@@ -1156,8 +1167,8 @@ class YOLOMBase(torch.nn.Module):
         """Encode the current image and its prediction into a memory feature."""
         C = self.hidden_dim
         H, W = feat_sizes[self.memory_position]
+        # print("feat_sizes:", feat_sizes)
         if self.attention_encoder:
-            # print("current_vision_feats:", current_vision_feats.shape)
             B = current_vision_feats.size(0)
             # B(HW)C => BCHW
             pix_feat = current_vision_feats.permute(0, 2, 1).view(B, C, H, W)
@@ -1179,6 +1190,7 @@ class YOLOMBase(torch.nn.Module):
             # print("feat_sizes:", feat_sizes)
             # pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
             pix_feat = current_vision_feats[self.memory_position].permute(1, 2, 0).view(B, C, H, W)
+            # print("pix_feat:", pix_feat.shape)
             # print("_encode_new_memory pix_feat:", pix_feat.shape)
             # if self.non_overlap_masks_for_mem_enc and not self.training:
             #     # optionally, apply non-overlapping constraints to the masks (it's applied
@@ -1233,6 +1245,8 @@ class YOLOMBase(torch.nn.Module):
         #     print("mask_for_mem:", mask_for_mem)
         # sys.exit()
         # print("memory_encoder pix_feat:", pix_feat[0][0][0][0])
+        print("pix_feat:", pix_feat.shape)
+        print("mask_for_mem:", mask_for_mem)
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
@@ -1729,5 +1743,93 @@ class YOLOMBase(torch.nn.Module):
         # print("self.yolo.detection_model.vpe.shape:", self.yolo.detection_model.vpe.shape)
         self.yolo.detection_model.model[-1].no = self.yolo.detection_model.model[-1].nc + self.yolo.detection_model.model[-1].reg_max * 4
         # print("self.yolo.detection_model.model[-1].no:", self.yolo.detection_model.model[-1].no)
+        # self.yolo.training = False
 
         return self
+    
+    def forward_mem(self, backbone_out):
+        curr = backbone_out['backbone_fpn'][self.memory_position]
+        # curr_clone = backbone_out['backbone_fpn'][self.memory_position].clone()
+        curr_pos = backbone_out['vision_pos_enc'][self.memory_position]
+        B, C, H, W = curr.shape
+        print("B, C, H, W:", B, C, H, W)
+        print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
+        print("backbone_out['vision_pos_enc']:", backbone_out['vision_pos_enc'][0].shape, backbone_out['vision_pos_enc'][1].shape, backbone_out['vision_pos_enc'][2].shape)
+        # (
+        #         _,
+        #         vision_feats,
+        #         vision_pos_embeds,
+        #         feat_sizes,
+        #         vision_feats_occluded,
+        #     ) = self._prepare_backbone_features(backbone_out, None)
+        # img_ids = [0]
+        # current_vision_feats = [x[:, img_ids] for x in vision_feats]
+        # current_vision_pos_embeds = [x[:, img_ids] for x in vision_pos_embeds]
+
+        # vision_pos_embeds = backbone_out["vision_pos_enc"][-self.num_feature_levels :]
+        # feat_sizes = [(x.shape[-2], x.shape[-1]) for x in vision_pos_embeds]
+        # current_vision_feats_prepare=[current_vision_feats[self.memory_position]]
+        # current_vision_pos_embeds_prepare=[current_vision_pos_embeds[self.memory_position]]
+        # feat_sizes_prepare=[feat_sizes[self.memory_position]]
+        if self.memory_bank == None:
+            # print("create memory_bank")
+            self.memory_bank = deque(maxlen=self.num_maskmem)
+        else:
+            to_cat_memory, to_cat_memory_pos_embed = [], []
+            for mi in range(len(self.memory_bank)):
+                print("mi:", mi)
+                to_cat_memory.append(self.memory_bank[mi]['maskmem_features'])
+                to_cat_memory_pos_embed.append(self.memory_bank[mi]['maskmem_pos_enc'] + self.maskmem_tpos_enc[mi])
+                # print("self.memory_bank[mi]['maskmem_features'].shape:", self.memory_bank[mi]['maskmem_features'].shape)
+                # print("self.memory_bank[mi]['maskmem_pos_enc'].shape:", self.memory_bank[mi]['maskmem_pos_enc'].shape)
+                # print("self.maskmem_tpos_enc[mi].shape:", self.maskmem_tpos_enc[mi].shape)
+                memory = torch.cat(to_cat_memory, dim=0)
+                memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
+                print("memory.shape:", memory.shape)
+                print("memory_pos_embed.shape:", memory_pos_embed.shape)
+                print("curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape:", curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape)
+                print("curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape:", curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape)
+                pix_feat_with_mem, _ = self.memory_attention(
+                    curr=[curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1])],
+                    curr_pos=[curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1])],
+                    memory=memory,
+                    memory_pos=memory_pos_embed,
+                    num_obj_ptr_tokens=0,
+                    curr_mem=None,
+                )
+                pix_feat_with_mem = pix_feat_with_mem.permute(1, 2, 0).view(B, C, H, W)
+                backbone_out['backbone_fpn'][self.memory_position] = pix_feat_with_mem
+        # print("torch.equal(curr_clone, backbone_out['backbone_fpn'][self.memory_position]):", torch.equal(curr_clone, backbone_out['backbone_fpn'][self.memory_position]))
+        # print("torch.equal(curr_clone, curr):", torch.equal(curr_clone, curr))
+        maskmem_out = self.memory_encoder(
+            curr, torch.tensor([0], device=self.device), skip_mask_sigmoid=True  # sigmoid already applied
+        )
+        maskmem_features = maskmem_out["vision_features"][0].unsqueeze(0).permute(0, 2, 3, 1)
+        maskmem_pos_enc = maskmem_out["vision_pos_enc"][0].permute(0, 2, 3, 1)
+        # print("maskmem_features.shape:", maskmem_features.shape[3]) #, len(maskmem_features))
+        # print("maskmem_pos_enc.shape:", maskmem_pos_enc.shape[3]) #, len(maskmem_pos_enc))
+        new_mem = {"maskmem_features": maskmem_features.reshape(-1, 1, maskmem_features.shape[3]), "maskmem_pos_enc": maskmem_pos_enc.reshape(-1, 1, maskmem_pos_enc.shape[3])}
+        print("new_mem['maskmem_features'].shape:", new_mem['maskmem_features'].shape) #, len(maskmem_features))
+        print("new_mem['maskmem_pos_enc'].shape:", new_mem['maskmem_pos_enc'].shape)
+        
+        self.memory_bank.append(new_mem)
+        # print("list(self.memory_bank):", list(self.memory_bank))
+        print("len(self.memory_bank):", len(self.memory_bank))
+
+        return backbone_out
+
+    # current_out = self._encode_memory_in_output(
+    #                 current_vision_feats=current_vision_feats,
+    #                 feat_sizes=feat_sizes,
+    #                 # point_inputs,
+    #                 run_mem_encoder=run_mem_encoder,
+    #                 # high_res_masks,
+    #                 # object_score_logits,
+    #                 # current_out,
+    #                 yolo_outputs=yolo_outputs_clone,
+    #                 img_ids=img_ids,
+    #                 init_cond_frames_gt=init_cond_frames_gt,
+    #                 recursive_pix_feat=pix_feat,
+    #                 current_bank=current_bank,
+    #                 atten_mem=atten_mem,
+    #             )
