@@ -646,7 +646,7 @@ class v2v_with_SAVPE_AutoBackend(AutoBackend):
                         verbose=verbose)
     
     def forward(self, im, batch=None, augment=False, visualize=False, embed=None, **kwargs):
-        print("v2v_with_SAVPE_AutoBackend forward")
+        # print("v2v_with_SAVPE_AutoBackend forward")
         """
         Runs inference on the YOLOv8 MultiBackend model.
 
@@ -661,12 +661,12 @@ class v2v_with_SAVPE_AutoBackend(AutoBackend):
             (torch.Tensor | List[torch.Tensor]): The raw output tensor(s) from the model.
         """
         b, ch, h, w = im.shape  # batch, channel, height, width
-        print("b, ch, h, w:", b, ch, h, w )
+        # print("b, ch, h, w:", b, ch, h, w )
         if self.fp16 and im.dtype != torch.float16:
             im = im.half()  # to FP16
         if self.nhwc:
             im = im.permute(0, 2, 3, 1)  # torch BCHW to numpy BHWC shape(1,320,192,3)
-        print("self.pt or self.nn_module:", self.pt or self.nn_module)
+        # print("self.pt or self.nn_module:", self.pt or self.nn_module)
         # print("self.jit:", self.jit)
         # print("self.dnn:", self.dnn)
         # print("self.onnx or self.imx:", self.onnx or self.imx)
@@ -681,19 +681,19 @@ class v2v_with_SAVPE_AutoBackend(AutoBackend):
         # print("self.rknn:", self.rknn)
         # PyTorch
         if self.pt or self.nn_module:
-            print("im:", im.shape)
-            print("batch:", batch)
-            print("augment:", augment)
-            print("visualize:", visualize)
-            print("embed:", embed)
-            print("kwargs:", kwargs)
+            # print("im:", im.shape)
+            # print("batch:", batch)
+            # print("augment:", augment)
+            # print("visualize:", visualize)
+            # print("embed:", embed)
+            # print("kwargs:", kwargs)
             y = self.model(im, batch=batch, augment=augment, visualize=visualize, embed=embed, **kwargs)
             # print("y:", y)
             # print("len(y):", len(y))
             # print("len(y[0]):", len(y[0]))
             # print("len(y[1]):", len(y[1]))
-            print("y[0].shape:", y[0].shape)
-            print("y[1].shape:", y[1][0].shape, y[1][1].shape, y[1][2].shape)
+            # print("y[0].shape:", y[0].shape)
+            # print("y[1].shape:", y[1][0].shape, y[1][1].shape, y[1][2].shape)
         # TorchScript
         elif self.jit:
             y = self.model(im)

@@ -1,5 +1,5 @@
 # from ultralytics import YOLOWorld
-
+# /DATA2/miniforge3/envs/oom/lib/python3.10/site-packages/ultralytics/
 import os, sys
 sys.path.insert(0, "/home/user/sdragon/sam2")
 from pathlib import Path
@@ -56,12 +56,14 @@ MODEL_YAML1 = f"/DATA3/erictsai/v2vdet/v2vdet_ultralytics/cfg/models/v2v/11/yolo
 # MODEL_YAML = f"/home/user/sdragon/sam2/sam2/configs/abo/tt20_oom11_s_mode2.yaml"
 # cfg_path="/home/user/sdragon/sam2/sam2/configs/abo/"
 # config_name="stream_tt20_oom11_s_mode2.yaml"
-MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/stream_tt20_oom11_s_mode2.yaml"
+# MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/stream_tt20_oom11_s_mode2.yaml"
 # CKPT_NAME = 'ckpt/v11m_SAVPE_SigLIP2_FT_multi_layer_135_Object365.pt'
 # CKPT_NAME = 'ckpt/OO_v11m_SAVPE_SigLIP2_FT_multi_layer_135_Object365.pt'
 CKPT_NAME1 = '/DATA3/erictsai/v2vdet/v2v_training_result/from_H100/SigLIP2_series/OO_v11s_SAVPE_SigLIP2_FT_multi_layer_135/weights/best.pt'
-CKPT_NAME2 = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
+# CKPT_NAME2 = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
 
+MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/stream_20_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml"
+CKPT_NAME2 = "/home/user/sdragon/sam2/sam2_logs/configs/abo/20_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml/checkpoints/best.pt"
 # def load_model_from_config(cfg_path, config_name):
 #     from hydra.core.global_hydra import GlobalHydra
 #     if GlobalHydra.instance().is_initialized():
@@ -265,7 +267,7 @@ class v2vdet_class():
         
         results = self.model(pil_image,
                         agnostic_nms=True,
-                        conf=0.15, #0.2,
+                        conf=0.2, #0.2,
                         device='cuda',
                         half=True)
 

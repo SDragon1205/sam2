@@ -6,8 +6,12 @@ import time
 # end = time.time()
 # print(f"耗時: {end - start:.4f} 秒")
 # MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/stream_tt20_oom11_s_mode2.yaml"
-MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/tt20_oom11_s_mode2_init_cond_frames_mode_1.yaml"
-CKPT_NAME2 = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
+
+# MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/tt20_oom11_s_mode2_init_cond_frames_mode_1.yaml"
+# CKPT_NAME2 = '/home/user/sdragon/sam2/checkpoints/oom11_s_num_maskmem_1_memory_position_0_no_mask_downsampler_downsampler_attentionlayer_1.pt'
+
+MODEL_YAML2 = "/home/user/sdragon/sam2/sam2/configs/abo/20_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml"
+CKPT_NAME2 = "/home/user/sdragon/sam2/sam2_logs/configs/abo/20_tt20_oom11_s_mode2_freeze_num_maskmem_1_before_neck_memory_position_0_no_mask_downsampler_pos_enc_at_attn_num_layers_1.yaml/checkpoints/best.pt"
 
 def load_model_from_config(MODEL_YAML2, CKPT_NAME2):
     from omegaconf import OmegaConf

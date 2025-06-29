@@ -945,8 +945,8 @@ class YOLOMBase(torch.nn.Module):
                 # Temporal positional encoding
                 if self.temp_pos_enc:  
                     # print(f"{t_pos}, self.temp_pos_enc:", self.num_maskmem - t_pos - 1)
-                    print("maskmem_enc:", maskmem_enc.shape)
-                    print("self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]:", self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1].shape)
+                    # print("maskmem_enc:", maskmem_enc.shape)
+                    # print("self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]:", self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1].shape)
                     maskmem_enc = (
                         maskmem_enc + self.maskmem_tpos_enc[self.num_maskmem - t_pos - 1]
                     )
@@ -1132,12 +1132,12 @@ class YOLOMBase(torch.nn.Module):
             curr=[current_out['maskmem_features'].permute(0, 2, 3, 1).reshape(-1, 1, self.hidden_dim)]
         else:
             curr=current_vision_feats
-        print("curr", len(curr), curr[0].shape)
-        print("curr_pos", len(curr_pos), curr_pos[0].shape)
-        print("memory", memory.shape)
-        print("memory_pos_embed", memory_pos_embed.shape)
-        print("num_obj_ptr_tokens", num_obj_ptr_tokens)
-        print("curr_mem", curr_mem)
+        # print("curr", len(curr), curr[0].shape)
+        # print("curr_pos", len(curr_pos), curr_pos[0].shape)
+        # print("memory", memory.shape)
+        # print("memory_pos_embed", memory_pos_embed.shape)
+        # print("num_obj_ptr_tokens", num_obj_ptr_tokens)
+        # print("curr_mem", curr_mem)
         pix_feat_with_mem, atten_mem = self.memory_attention(
             curr=curr,
             curr_pos=curr_pos,
@@ -1245,8 +1245,8 @@ class YOLOMBase(torch.nn.Module):
         #     print("mask_for_mem:", mask_for_mem)
         # sys.exit()
         # print("memory_encoder pix_feat:", pix_feat[0][0][0][0])
-        print("pix_feat:", pix_feat.shape)
-        print("mask_for_mem:", mask_for_mem)
+        # print("pix_feat:", pix_feat.shape)
+        # print("mask_for_mem:", mask_for_mem)
         maskmem_out = self.memory_encoder(
             pix_feat, mask_for_mem, skip_mask_sigmoid=True  # sigmoid already applied
         )
@@ -1752,9 +1752,9 @@ class YOLOMBase(torch.nn.Module):
         # curr_clone = backbone_out['backbone_fpn'][self.memory_position].clone()
         curr_pos = backbone_out['vision_pos_enc'][self.memory_position]
         B, C, H, W = curr.shape
-        print("B, C, H, W:", B, C, H, W)
-        print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
-        print("backbone_out['vision_pos_enc']:", backbone_out['vision_pos_enc'][0].shape, backbone_out['vision_pos_enc'][1].shape, backbone_out['vision_pos_enc'][2].shape)
+        # print("B, C, H, W:", B, C, H, W)
+        # print("backbone_out['backbone_fpn']:", backbone_out['backbone_fpn'][0].shape, backbone_out['backbone_fpn'][1].shape, backbone_out['backbone_fpn'][2].shape)
+        # print("backbone_out['vision_pos_enc']:", backbone_out['vision_pos_enc'][0].shape, backbone_out['vision_pos_enc'][1].shape, backbone_out['vision_pos_enc'][2].shape)
         # (
         #         _,
         #         vision_feats,
@@ -1777,7 +1777,7 @@ class YOLOMBase(torch.nn.Module):
         else:
             to_cat_memory, to_cat_memory_pos_embed = [], []
             for mi in range(len(self.memory_bank)):
-                print("mi:", mi)
+                # print("mi:", mi)
                 to_cat_memory.append(self.memory_bank[mi]['maskmem_features'])
                 to_cat_memory_pos_embed.append(self.memory_bank[mi]['maskmem_pos_enc'] + self.maskmem_tpos_enc[mi])
                 # print("self.memory_bank[mi]['maskmem_features'].shape:", self.memory_bank[mi]['maskmem_features'].shape)
@@ -1785,10 +1785,10 @@ class YOLOMBase(torch.nn.Module):
                 # print("self.maskmem_tpos_enc[mi].shape:", self.maskmem_tpos_enc[mi].shape)
                 memory = torch.cat(to_cat_memory, dim=0)
                 memory_pos_embed = torch.cat(to_cat_memory_pos_embed, dim=0)
-                print("memory.shape:", memory.shape)
-                print("memory_pos_embed.shape:", memory_pos_embed.shape)
-                print("curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape:", curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape)
-                print("curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape:", curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape)
+                # print("memory.shape:", memory.shape)
+                # print("memory_pos_embed.shape:", memory_pos_embed.shape)
+                # print("curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape:", curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1]).shape)
+                # print("curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape:", curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1]).shape)
                 pix_feat_with_mem, _ = self.memory_attention(
                     curr=[curr.permute(0, 2, 3, 1).reshape(-1, 1, curr.shape[1])],
                     curr_pos=[curr_pos.permute(0, 2, 3, 1).reshape(-1, 1, curr_pos.shape[1])],
@@ -1809,8 +1809,8 @@ class YOLOMBase(torch.nn.Module):
         # print("maskmem_features.shape:", maskmem_features.shape[3]) #, len(maskmem_features))
         # print("maskmem_pos_enc.shape:", maskmem_pos_enc.shape[3]) #, len(maskmem_pos_enc))
         new_mem = {"maskmem_features": maskmem_features.reshape(-1, 1, maskmem_features.shape[3]), "maskmem_pos_enc": maskmem_pos_enc.reshape(-1, 1, maskmem_pos_enc.shape[3])}
-        print("new_mem['maskmem_features'].shape:", new_mem['maskmem_features'].shape) #, len(maskmem_features))
-        print("new_mem['maskmem_pos_enc'].shape:", new_mem['maskmem_pos_enc'].shape)
+        # print("new_mem['maskmem_features'].shape:", new_mem['maskmem_features'].shape) #, len(maskmem_features))
+        # print("new_mem['maskmem_pos_enc'].shape:", new_mem['maskmem_pos_enc'].shape)
         
         self.memory_bank.append(new_mem)
         # print("list(self.memory_bank):", list(self.memory_bank))
