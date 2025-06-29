@@ -1043,6 +1043,9 @@ class YOLOMTrain(YOLOMBase):
         if self.init_cond_frames_mode == 3:
             input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.num_maskmem)
             all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.num_maskmem)
+        elif (self.skip_n_frame_val != -1) and (not self.training):
+            input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.skip_n_frame_val)
+            all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.skip_n_frame_val)
         elif self.skip_n_frame != -1:
             input.gtdata = self.skip_first_frame_gtdata_t(input.gtdata, self.skip_n_frame)
             all_frame_outputs = self.remove_batch_t(all_frame_outputs, self.skip_n_frame)

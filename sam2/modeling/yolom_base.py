@@ -124,6 +124,7 @@ class YOLOMBase(torch.nn.Module):
         trace_gradient: bool = False,
         skip_first_frame: bool = False,
         skip_n_frame: int = -1,
+        skip_n_frame_val: int = -1,
         select_frame: int = -1,
         encode_frame_first: bool = False,
         two_sa: bool = False,
@@ -279,6 +280,7 @@ class YOLOMBase(torch.nn.Module):
         self.two_sa = two_sa
         self.memory_before_16 = memory_before_16
         self.skip_n_frame = skip_n_frame
+        self.skip_n_frame_val = skip_n_frame_val
         self.current_frame_occluded_all = current_frame_occluded_all
         self.prev1_frame_occluded_all = prev1_frame_occluded_all
         self.prev1_frame_no_memory = prev1_frame_no_memory
