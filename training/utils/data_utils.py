@@ -201,6 +201,7 @@ class VideoDatapoint_yolo:
     frames: List[Frame_yolo]
     video_id: int
     size: Tuple[int, int]
+    image_path: str
 
 @tensorclass
 class BatchedVideoMetaData_yolo:
@@ -239,6 +240,7 @@ class BatchedVideoDatapoint_yolo:
     gtdata: Dict[str, torch.Tensor]
 
     dict_key: str
+    image_path: str
 
     def pin_memory(self, device=None):
         return self.apply(torch.Tensor.pin_memory, device=device)
@@ -401,4 +403,5 @@ def collate_fn_yolo(
         },
         dict_key=dict_key,
         batch_size=[T],
+        image_path=batch[0].image_path,
     )

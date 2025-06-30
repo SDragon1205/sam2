@@ -29,7 +29,7 @@ import random
 import itertools
 from training.dataset.transforms import gaussian_blur_batch
 from training.trainer_yolo import visualize_batched_video
-
+from ultralytics.utils import ops
 # from ultralytics.data.augment import RandomLoadText
 class RandomLoadText:
     """
@@ -1027,6 +1027,18 @@ class YOLOMTrain(YOLOMBase):
 
         if return_dict:
             return output_dict
+        
+        if input.image_path == "/home/user/sdragon/visdrone dataset/VisDrone2019-VID-test-dev_20/sequences/uav0000161_00000_v_6/0000001.jpg":
+            preds = ops.non_max_suppression(
+                all_frame_outputs,
+                conf_thres=0.25, #0.25,
+                iou_thres=0.7,
+                agnostic=False,
+                max_det=300,
+                # nc=self.detect_nc,
+            )
+            visualize_batched_video(input, preds)
+            sys.exit()
         # # turn `output_dict` into a list for loss function
         # all_frame_outputs = {}
         # all_frame_outputs.update(output_dict["cond_frame_outputs"])

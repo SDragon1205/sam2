@@ -77,13 +77,16 @@ def preprocess_img(img: torch.Tensor):
     return img
 def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float, float]], 
                        classes: List[Union[int, str]], scores: List[float], 
-                       frame_size: Tuple[int, int]):
+                       frame_size: Tuple[int, int], color="red", xywh=True):
     """
     Draw bounding boxes and class labels on the image.
     """
     # Convert tensor to PIL image
-    img = preprocess_img(img)
-    img_pil = to_pil_image(img)
+    if isinstance(img, torch.Tensor):
+        img = preprocess_img(img)
+        img_pil = to_pil_image(img)
+    else:
+        img_pil = img
     draw = ImageDraw.Draw(img_pil)
     font = ImageFont.load_default()  # Use a default bitmap font
 
@@ -92,14 +95,17 @@ def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float
 
     for bbox, cls, score in zip(bboxes, classes, scores):
         # Decode normalized bbox to pixel coordinates
-        x_center, y_center, w, h = bbox
-        x_min = (x_center - w / 2) * width
-        y_min = (y_center - h / 2) * height
-        x_max = (x_center + w / 2) * width
-        y_max = (y_center + h / 2) * height
+        if xywh:
+            x_center, y_center, w, h = bbox
+            x_min = (x_center - w / 2) * width
+            y_min = (y_center - h / 2) * height
+            x_max = (x_center + w / 2) * width
+            y_max = (y_center + h / 2) * height
+        else:
+            x_min, y_min, x_max, y_max = bbox
 
         # Draw bounding box
-        draw.rectangle([x_min, y_min, x_max, y_max], outline="red", width=2)
+        draw.rectangle([x_min, y_min, x_max, y_max], outline=color, width=2)
 
         # Draw class label and score
         label = f"{cls} ({score:.2f})"
@@ -107,10 +113,10 @@ def draw_bbox_on_frame(img: torch.Tensor, bboxes: List[Tuple[float, float, float
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
         text_position = (x_min, y_min - text_height if y_min > text_height else y_min + 5)
-        draw.text(text_position, label, fill="yellow", font=font)
+        draw.text(text_position, label, fill=color, font=font)
 
     return img_pil
-def visualize_batched_video(batched_video, folder="tmp"):
+def visualize_batched_video(batched_video, preds=None, folder="tmp"):
     """
     Process all videos and frames in the BatchedVideoDatapoint_yolo object.
     """
@@ -146,8 +152,20 @@ def visualize_batched_video(batched_video, folder="tmp"):
 
             # Draw bboxes on frame
             frame_with_bboxes = draw_bbox_on_frame(
-                frame_img, frame_bboxes, frame_classes, frame_scores, frame_size
+                frame_img, frame_bboxes, frame_classes, frame_scores, frame_size, color="red"
             )
+
+            if preds is not None and len(preds) > batch_idx:
+                pred = preds[batch_idx]
+                # print("pred:", pred)
+                if pred is not None and len(pred) > 0:
+                    pred = pred.cpu().numpy()
+                    pred_bboxes = pred[:, :4].tolist()
+                    pred_scores = pred[:, 4].tolist()
+                    pred_classes = pred[:, 5].tolist()
+                    frame_with_bboxes = draw_bbox_on_frame(
+                        frame_with_bboxes, pred_bboxes, pred_classes, pred_scores, frame_size, color="blue", xywh=False
+                    )
 
             # Save frame to current directory
             output_path = f"{folder}/frame_{b}_{t}.png"
@@ -584,6 +602,7 @@ class Trainer_yolo:
         phase: str,
     ):
         outputs = model(batch)
+        # print("batch.image_path:", batch.image_path)
         # print("after input.gtdata:", batch.gtdata)
         # sys.exit()
         # print("outputs:", outputs[0].shape, outputs[1].shape, outputs[2].shape)
@@ -648,7 +667,7 @@ class Trainer_yolo:
 
         # print("2outputs[0]:", outputs[0].shape)
         # print("2outputs[1]:", outputs[1][0].shape, outputs[1][1].shape, outputs[1][2].shape)
-
+        self.validator.init_metrics()
         nms_outputs = self.validator.postprocess(outputs)
         # for i_preds in range(len(nms_outputs)):
         #     print(f"nms_outputs[{i_preds}].shape: {nms_outputs[i_preds].shape}")
@@ -661,7 +680,12 @@ class Trainer_yolo:
         # stats = self.validator.get_stats()
         # self.validator.check_stats(stats)
         # self.validator.finalize_metrics()
-        # self.validator.print_results()
+        # # self.validator.print_results()
+
+        # save_path = "cmp/2.txt"
+        # with open(save_path, "a") as f:
+        #     f.write(batch.image_path + "\n")
+        # self.validator.print_results(save_path=save_path)
         # sys.exit()
         # return {loss_str: loss}, batch_size, step_losses, output_dict
         return ret_tuple

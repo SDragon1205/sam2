@@ -256,14 +256,23 @@ class maP50_Validator:
         # print("correct:", correct)
         return torch.tensor(correct, dtype=torch.bool, device=pred_classes.device)
     
-    def print_results(self):
+    def print_results(self, save_path=None):
         """Prints training/validation set metrics per class."""
         # print("self.seen:", self.seen)
         # print("self.nt_per_class.sum(): ", self.nt_per_class.sum())
         # print("*self.metrics.mean_results(): ", *self.metrics.mean_results())
         result = self.metrics.mean_results()
-        print("====================================================================")
-        print(f"Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})")
-        print("====================================================================")
+        # print("====================================================================")
+        # print(f"Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})")
+        # print("====================================================================")
+        output = (
+            "====================================================================\n"
+            f"Images:{self.seen}, Instances:{self.nt_per_class.sum()}, Box(P:{result[0]}, R:{result[1]}, mAP50:{result[2]}, mAP50-95:{result[3]})\n"
+            "===================================================================="
+        )
+        print(output)
         # sys.exit()
+        if save_path:
+            with open(save_path, "a") as f:
+                f.write(output + "\n")
         return self.seen, self.nt_per_class.sum(), result[0], result[1], result[2], result[3]

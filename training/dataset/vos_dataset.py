@@ -7,7 +7,7 @@
 import logging
 import random
 from copy import deepcopy
-
+import sys
 import numpy as np
 
 import torch
@@ -231,6 +231,8 @@ class VOSDataset_yolo(VisionDataset):
 
         images = []
         rgb_images = load_images(sampled_frames)  # 加載 RGB 影像
+        # print("sampled_frames[0].image_path:", sampled_frames[0].image_path)
+        # sys.exit()
         # Iterate over the sampled frames and store their rgb data and YOLO object data (classes, bboxes)
         for frame_idx, frame in enumerate(sampled_frames):
             # 獲取影像尺寸
@@ -269,6 +271,7 @@ class VOSDataset_yolo(VisionDataset):
             frames=images,
             video_id=video.video_id,
             size=(h, w),
+            image_path=sampled_frames[0].image_path,
         )
 
     def __getitem__(self, idx):
